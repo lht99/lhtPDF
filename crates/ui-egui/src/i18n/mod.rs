@@ -671,11 +671,9 @@ mod tests {
             ));
         }
 
-        let path = std::path::Path::new(
-            "C:/dev/pdfcraft/dist/step247-vi-missing.tsv"
-        );
+        let path = std::env::temp_dir().join("lhtpdf-vi-missing.tsv");
 
-        std::fs::write(path, report)
+        std::fs::write(&path, report)
             .expect("write Vietnamese coverage report");
 
         assert!(
