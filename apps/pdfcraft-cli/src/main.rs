@@ -70,7 +70,7 @@ pdfcraft-cli run    --script steps.json [--root DIR]      [{\"tool\": \"doc_open
     "\
 pdfcraft-cli ui     --control FILE <method> [key=value …] [--out shot.png]
                                                            drive a running app started with --control FILE
-help and feedback: https://discord.gg/artcraft"
+website and support: https://letuan.io.vn"
 );
 
 fn main() -> ExitCode {
@@ -148,10 +148,10 @@ fn stdout_line(line: std::fmt::Arguments<'_>) -> Result<(), CliError> {
 }
 
 fn version() -> Result<(), CliError> {
-    stdout_line(format_args!("pdfcraft-cli {}", pdfcraft_engine::build_info::version()))?;
-    stdout_line(format_args!("Discord: {}  (help and feedback)", pdfcraft_engine::links::DISCORD))?;
-    stdout_line(format_args!("Web:     {}", pdfcraft_engine::links::APP_PAGE))?;
-    stdout_line(format_args!("Source:  {}", pdfcraft_engine::links::GITHUB))?;
+    stdout_line(format_args!("lhtPDF {}", pdfcraft_engine::build_info::version()))?;
+    stdout_line(format_args!("Website & Support: {}", pdfcraft_engine::links::APP_PAGE))?;
+    stdout_line(format_args!("Original source: {}", pdfcraft_engine::links::GITHUB))?;
+    stdout_line(format_args!("Thanks to the original PdfCraft authors and contributors."))?;
     Ok(())
 }
 

@@ -25,6 +25,8 @@ const PROBE: char = '\u{0627}';
 const DEVANAGARI_PROBE: char = '\u{0915}';
 /// Telugu letter ka: the face must have it to cover Telugu.
 const TELUGU_PROBE: char = '\u{0C15}';
+/// 한 (U+D55C): verify support for Korean Hangul.
+const KOREAN_PROBE: char = '\u{D55C}';
 /// 欢 (U+6B22): Simplified only, absent from the Japanese craft-fonts faces.
 const HANS_PROBE: char = '\u{6B22}';
 /// 說 (U+8AAA): Traditional only, absent from the Japanese craft-fonts faces.
@@ -80,6 +82,12 @@ pub fn devanagari_fallback() -> Option<Arc<FontData>> {
 pub fn telugu_fallback() -> Option<Arc<FontData>> {
     static CACHE: OnceLock<Option<Arc<FontData>>> = OnceLock::new();
     CACHE.get_or_init(|| script_fallback(&telugu_candidates(), TELUGU_PROBE)).clone()
+}
+
+/// The installed fallback face for Korean Hangul, read once.
+pub fn korean_fallback() -> Option<Arc<FontData>> {
+    static CACHE: OnceLock<Option<Arc<FontData>>> = OnceLock::new();
+    CACHE.get_or_init(|| script_fallback(&korean_candidates(), KOREAN_PROBE)).clone()
 }
 
 fn script_fallback(candidates: &[PathBuf], probe: char) -> Option<Arc<FontData>> {
@@ -216,6 +224,11 @@ fn han_candidates(traditional: bool) -> Vec<PathBuf> {
     }
 }
 
+/// Installed Korean Hangul fonts, preferred in regular, bold, light order.
+fn korean_candidates() -> Vec<PathBuf> {
+    if cfg!(windows) { ["malgun.ttf", "NotoSansKR-VF.ttf", "gulim.ttc", "batang.ttc", "malgunbd.ttf", "malgunsl.ttf"].iter().map(|f| windows_fonts().join(f)).collect() } else { Vec::new() }
+}
+
 fn windows_fonts() -> PathBuf {
     let dir = std::env::var_os("WINDIR").or_else(|| std::env::var_os("SystemRoot")).map_or_else(|| PathBuf::from(r"C:\Windows"), PathBuf::from);
     dir.join("Fonts")
@@ -312,4 +325,42 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn korean_system_font_supports_hangul() {
+        if !cfg!(windows) {
+            return;
+        }
+
+        let path = windows_fonts().join("malgun.ttf");
+
+        if !path.is_file() {
+            return;
+        }
+
+        let bytes = std::fs::read(&path)
+            .expect("failed to read Malgun Gothic");
+
+        assert!(
+            face_with(&bytes, KOREAN_PROBE).is_some(),
+            "Malgun Gothic does not contain Hangul"
+        );
+
+        let disabled = std::env::var_os("PDFCRAFT_SYSTEM_FONTS")
+            .is_some_and(|v| v == "0");
+
+        if disabled {
+            assert!(
+                korean_fallback().is_none(),
+                "Korean fallback must be disabled"
+            );
+        } else {
+            assert!(
+                korean_fallback().is_some(),
+                "Korean fallback could not be loaded"
+            );
+        }
+    }
+
+
 }

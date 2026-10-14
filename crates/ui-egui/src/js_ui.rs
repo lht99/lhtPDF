@@ -377,7 +377,7 @@ pub(crate) fn preferences_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tok
     ui.label(egui::RichText::new(tl!("For page sizes and margins.")).small().color(t.text_muted));
     // The web build has no file paths to reopen.
     #[cfg(not(target_arch = "wasm32"))]
-    ui.add(widgets::checkbox(&mut app.reopen_last_session, tl!("Reopen the files that were open when PdfCraft last closed")));
+    ui.add(widgets::checkbox(&mut app.reopen_last_session, tl!("Reopen the files that were open when lhtPDF last closed")));
     // The web build has no files on disk to watch.
     #[cfg(not(target_arch = "wasm32"))]
     ui.add(widgets::checkbox(&mut app.reload_changed_files, tl!("Reload documents when their files change on disk")));
@@ -551,28 +551,29 @@ fn date_format(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) {
         );
     }
     ui.horizontal(|ui| {
-        let label = ui.label(tl!("Language"));
+        ui.label(tl!("Language"));
         let interface = crate::i18n::current().name();
         let follow = crate::i18n::fmt(tl!("Same as interface ({language})"), &[("language", interface)]);
         let current = app.session.date_language().map(str::to_string);
-        let selected = DATE_LANGUAGES.iter().find(|l| current.as_deref() == Some(l.code)).map_or(follow.clone(), |l| l.name.to_string());
-        egui::ComboBox::from_id_salt("date-language")
-            .selected_text(selected)
-            .width(240.0)
-            .show_ui(ui, |ui| {
-                if ui.selectable_label(current.is_none(), follow).clicked() && app.session.set_date_language(None).is_ok() {
-                    ui.close();
+        ui.horizontal_wrapped(|ui| {
+            if ui.selectable_label(
+                current.is_none(),
+                follow.as_str()
+            ).clicked() {
+                let _ = app.session.set_date_language(None);
+            }
+
+            for l in DATE_LANGUAGES.iter().filter(
+                |l| matches!(l.code, "en" | "vi")
+            ) {
+                if ui.selectable_label(
+                    current.as_deref() == Some(l.code),
+                    l.name
+                ).clicked() {
+                    let _ = app.session.set_date_language(Some(l.code));
                 }
-                for l in &DATE_LANGUAGES {
-                    if ui.selectable_label(current.as_deref() == Some(l.code), l.name).clicked()
-                        && app.session.set_date_language(Some(l.code)).is_ok()
-                    {
-                        ui.close();
-                    }
-                }
-            })
-            .response
-            .labelled_by(label.id);
+            }
+        });
     });
     ui.label(
         egui::RichText::new(crate::i18n::fmt(

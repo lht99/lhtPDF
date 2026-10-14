@@ -1,9 +1,37 @@
-PdfCraft portable mode
+lhtPDF Portable Mode
 
-While this file sits next to pdfcraft.exe, PdfCraft keeps its settings, log files, crash-recovery
-autosaves and new digital IDs in the PdfCraftData folder beside it, and writes nothing to
-%APPDATA% or %LOCALAPPDATA%. Copy the whole folder to move PdfCraft with its settings.
+Keep this portable.txt file beside lhtPDF.exe to enable portable mode.
 
-Delete this file to use the normal per-user folders (%APPDATA%\PdfCraft and
-%LOCALAPPDATA%\PdfCraft) instead. If PdfCraftData can't be written (for example on a read-only
-drive), PdfCraft says so and uses the per-user folders instead.
+For a new portable installation, lhtPDF stores settings, log files,
+crash-recovery autosaves and newly created digital IDs in:
+
+    lhtPDFData
+
+This folder is located beside lhtPDF.exe.
+
+Compatibility with older portable versions:
+- If lhtPDFData already exists, lhtPDF uses it.
+- Otherwise, if PdfCraftData exists, lhtPDF uses that existing folder.
+- If neither exists, lhtPDF creates lhtPDFData.
+
+Existing PdfCraftData files are not automatically moved or deleted.
+
+Copy the whole portable application folder, including its data folder,
+to move lhtPDF together with its settings.
+
+To disable portable mode, remove portable.txt while lhtPDF is closed.
+Without a portable marker, the application uses its normal per-user
+settings folders.
+
+If the portable data folder cannot be written, lhtPDF reports the
+problem and falls back to the normal per-user folders.
+
+Website & Support:
+https://letuan.io.vn
+
+Original open-source project:
+https://github.com/storytold/pdfcraft
+
+Thanks to the original PdfCraft authors and contributors.
+Original license notices are preserved in LICENSE-MIT, LICENSE-APACHE
+and NOTICE.

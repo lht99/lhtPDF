@@ -39,6 +39,7 @@ mod motion;
 mod reopen;
 mod single_instance;
 mod text_scale;
+#[cfg(test)]
 mod updates;
 #[cfg(test)]
 #[path = "windows_manifest.rs"]
@@ -60,6 +61,55 @@ const LEGACY_STORAGE_KEY: &str = "printcraft";
 /// The settings folder: `app.ron` and the `logs` folder (docs/development.md). In portable mode
 /// it is `PdfCraftData` beside the executable (#157). eframe would otherwise derive it from the
 /// app id; keep it under "PdfCraft".
+/// Whether this launch has no existing saved application settings.
+/// A Portable first-run language choice must not overwrite legacy settings.
+/// The MSI's initial interface language (English or Vietnamese).
+/// Portable installations use their own first-run chooser instead.
+#[cfg(target_os = "windows")]
+fn msi_install_language() -> Option<&'static str> {
+    if pdfcraft_ui_egui::portable::data_dir().is_some() {
+        return None;
+    }
+
+    let output = std::process::Command::new("reg.exe")
+        .args([
+            "query",
+            r"HKLM\SOFTWARE\lhtPDF",
+            "/v",
+            "InstallLanguage",
+            "/reg:64",
+        ])
+        .output()
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    for line in stdout.lines() {
+        let fields: Vec<_> = line.split_whitespace().collect();
+
+        if fields.len() >= 3
+            && fields[0].eq_ignore_ascii_case("InstallLanguage")
+            && fields[1].eq_ignore_ascii_case("REG_SZ")
+        {
+            return match fields[2] {
+                "en" => Some("en"),
+                "vi" => Some("vi"),
+                _ => None,
+            };
+        }
+    }
+
+    None
+}
+fn is_first_run() -> bool {
+    settings_dir()
+        .map(|dir| !dir.join("app.ron").is_file())
+        .unwrap_or(false)
+}
 fn settings_dir() -> Option<std::path::PathBuf> {
     if let Some(dir) = pdfcraft_ui_egui::portable::data_dir() {
         return Some(dir.to_path_buf());
@@ -232,7 +282,7 @@ fn main() -> eframe::Result {
     let started = Rc::new(Cell::new(false));
     let first = if choice == RendererChoice::Gl { eframe::Renderer::Glow } else { eframe::Renderer::Wgpu };
     let result = eframe::run_native(
-        "PdfCraft",
+        "lhtPDF",
         native_options(launch.integrated, launch.window_controls.is_some(), first),
         app_creator(
             launch.clone(),
@@ -250,7 +300,7 @@ fn main() -> eframe::Result {
             // usually still works there, so that's better than quitting.
             log::error!("the GPU renderer (wgpu) didn't start: {e}. Starting with OpenGL instead; set PDFCRAFT_RENDERER=gl to skip wgpu.");
             eframe::run_native(
-                "PdfCraft",
+                "lhtPDF",
                 native_options(launch.integrated, launch.window_controls.is_some(), eframe::Renderer::Glow),
                 app_creator(
                     launch,
@@ -293,7 +343,7 @@ fn retry_with_gl(choice: RendererChoice, app_started: bool) -> bool {
 /// The window and renderer settings for one run.
 fn native_options(integrated: bool, app_frame: bool, renderer: eframe::Renderer) -> eframe::NativeOptions {
     let mut viewport = egui::ViewportBuilder::default()
-        .with_title("PdfCraft")
+        .with_title("lhtPDF")
         .with_inner_size([1440.0, 920.0])
         .with_min_inner_size([820.0, 520.0])
         .with_drag_and_drop(true)
@@ -348,9 +398,57 @@ fn app_creator<'a>(
         app.enable_desktop_theme();
         // The system's reopen-windows choice (macOS) starts the preference; a saved choice replaces it.
         app.reopen_last_session = reopen::system_default();
-        if let Some(json) = cc.storage.and_then(|s| s.get_string("pdfcraft").or_else(|| s.get_string(LEGACY_STORAGE_KEY))) {
+        let saved_settings = cc.storage
+            .and_then(|s| s.get_string("pdfcraft").or_else(|| s.get_string(LEGACY_STORAGE_KEY)));
+
+        let has_saved_settings = saved_settings.is_some();
+
+        // Remember whether a language preference was explicitly saved.
+        // "auto" is a valid personal choice and must not be overridden.
+        let saved_language = saved_settings
+            .as_deref()
+            .and_then(|json| serde_json::from_str::<serde_json::Value>(json).ok())
+            .and_then(|value| value.get("language").and_then(|v| v.as_str()).map(str::to_owned));
+
+        let has_saved_language = saved_language.is_some();
+
+
+        if let Some(json) = saved_settings {
             app.restore(&json);
         }
+
+        // Previously supported languages may no longer be in the
+        // English/Vietnamese release. Preserve valid preferences,
+        // but use English for unsupported saved language codes.
+        if let Some(language) = saved_language.as_deref() {
+            if !matches!(language, "auto" | "en" | "vi") {
+                app.language = "en".to_string();
+            }
+        }
+
+        // Use the language chosen by the MSI only when the user has not
+
+        // saved a language preference. Portable installations are excluded
+        // by msi_install_language().
+        #[cfg(target_os = "windows")]
+        if !has_saved_language {
+            if let Some(language) = msi_install_language() {
+                app.language = language.to_string();
+            }
+        }
+
+        // Ask only on the first launch of a genuinely new Portable copy.
+
+        // Existing settings and explicit command-line language choices take precedence.
+        let language_on_command_line = options.iter()
+            .any(|(key, _)| key == "language");
+
+        app.portable_language_prompt =
+            pdfcraft_ui_egui::portable::data_dir().is_some()
+            && is_first_run()
+            && !has_saved_settings
+            && !language_on_command_line;
+
         app.integrated_titlebar = integrated;
         app.window_controls = window_controls;
         app.system_text_scale = text_scale::system();
@@ -360,7 +458,9 @@ fn app_creator<'a>(
         {
             app.motion.source = Some(motion::source());
         }
-        app.update_source = Some(std::sync::Arc::new(updates::latest_release));
+        // lhtPDF has no independent release feed yet.
+        // Do not query the original PdfCraft release API.
+        app.update_source = None;
         app.printer_source = Some(pdfcraft_ui_egui::system_printers());
         app.os_key_store_ids = cfg!(any(target_os = "macos", target_os = "windows"));
         #[cfg(target_os = "macos")]

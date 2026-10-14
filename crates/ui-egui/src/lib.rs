@@ -524,6 +524,9 @@ pub struct PdfCraftApp {
     pub motion: motion::Motion,
     /// Interface language preference: `auto` (follow the system) or a code from [`i18n::LANGUAGES`].
     pub language: String,
+    /// Show the language chooser for a fresh Portable installation.
+    /// Transient UI state: never serialize it to app.ron.
+    pub portable_language_prompt: bool,
     /// Preferences ▸ Interface size as a factor, or `None` to follow [`Self::system_text_scale`].
     pub ui_scale: Option<f32>,
     /// The desktop's text scaling (GNOME's text scaling factor), which the desktop app reads at
@@ -890,6 +893,7 @@ impl PdfCraftApp {
             animation_effects: motion::AnimationEffects::default(),
             motion: motion::Motion::default(),
             language: i18n::AUTO.to_string(),
+            portable_language_prompt: false,
             ui_scale: None,
             system_text_scale: 1.0,
             ui_scale_applied: None,
@@ -2746,6 +2750,15 @@ impl eframe::App for PdfCraftApp {
         storage.set_string("pdfcraft", self.persist());
     }
 
+    fn auto_save_interval(&self) -> std::time::Duration {
+        if crate::portable::data_dir().is_some() {
+            std::time::Duration::from_secs(1)
+        } else {
+            std::time::Duration::from_secs(30)
+        }
+    }
+
+
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.ctx = Some(ctx.clone());
         self.dialog_epoch();
@@ -2905,6 +2918,33 @@ impl eframe::App for PdfCraftApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         i18n::set_current(i18n::Lang::from_pref(&self.language));
+        // First-run Portable language selection.
+        // Do not draw the regular workspace until the user has selected a language.
+        if self.portable_language_prompt {
+            egui::CentralPanel::default().show(ui, |ui| {
+                ui.vertical_centered(|ui| {
+                    ui.add_space(110.0);
+                    ui.heading("Welcome to lhtPDF / Chào mừng đến với lhtPDF");
+                    ui.add_space(18.0);
+                    ui.label("Choose your language / Chọn ngôn ngữ");
+                    ui.add_space(20.0);
+
+                    if ui.add_sized([220.0, 38.0], egui::Button::new("Tiếng Việt")).clicked() {
+                        self.language = "vi".to_string();
+                        self.portable_language_prompt = false;
+                    }
+
+                    ui.add_space(10.0);
+
+                    if ui.add_sized([220.0, 38.0], egui::Button::new("English")).clicked() {
+                        self.language = "en".to_string();
+                        self.portable_language_prompt = false;
+                    }
+                });
+            });
+            ctx.request_repaint();
+            return;
+        }
         // Fonts registered via set_fonts only take effect next frame; named families would panic now.
         if !self.fonts_ready {
             ctx.request_repaint();
@@ -2919,7 +2959,7 @@ impl eframe::App for PdfCraftApp {
             .and_then(|i| self.session.get(self.views[i].id))
             .map(|d| d.display_name())
             .or_else(|| self.combine_showing().then(|| tl!("Combine files").to_owned()))
-            .map_or_else(|| "PdfCraft".to_owned(), |name| format!("{name} — PdfCraft"));
+            .map_or_else(|| "lhtPDF".to_owned(), |name| format!("{name} — lhtPDF"));
         if title != self.window_title {
             ctx.send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
             self.window_title = title;

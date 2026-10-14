@@ -11,7 +11,8 @@ pub const LABEL: Option<&str> = option_env!("PDFCRAFT_BUILD_LABEL");
 
 /// The version as shown to people: `0.7.1`, or `0.7.1 (titlebar)` for a labelled build.
 pub fn version() -> String {
-    describe(VERSION, LABEL)
+    let release_version = option_env!("LHTPDF_VERSION").unwrap_or(VERSION);
+    describe(release_version, LABEL)
 }
 
 fn describe(version: &str, label: Option<&str>) -> String {

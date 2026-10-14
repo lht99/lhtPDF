@@ -1,0 +1,81 @@
+name: lhtPDF Windows Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-x64:
+    runs-on: windows-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Configure Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install WiX v5
+        shell: pwsh
+        run: |
+          dotnet tool install --global wix --version 5.0.2
+          wix --version
+
+      - name: Verify Windows resource tools
+        shell: pwsh
+        run: |
+          $rc = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Filter rc.exe -Recurse -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match '\\x64\\rc\.exe$' } |
+            Select-Object -First 1
+          if (-not $rc) { throw "Windows SDK rc.exe not found" }
+          Write-Host $rc.FullName
+
+      - name: Run UI tests
+        shell: pwsh
+        run: cargo test --locked -p pdfcraft-ui-egui --lib
+
+      - name: Build and package Windows x64
+        shell: pwsh
+        env:
+          DIST: ${{ github.workspace }}/dist/release-10.2.2
+        run: |
+          ./packaging/windows/package.ps1 -Arch x64
+
+      - name: Generate SHA256SUMS
+        shell: pwsh
+        run: |
+          $folder = "dist/release-10.2.2"
+          $names = @(
+            "lhtPDF-10.2.2-windows-x64.msi",
+            "lhtPDF-10.2.2-windows-x64-portable.zip"
+          )
+          $lines = foreach ($name in $names) {
+            $path = Join-Path $folder $name
+            if (-not (Test-Path $path)) { throw "Missing release asset: $path" }
+            $hash = (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $name"
+          }
+          [System.IO.File]::WriteAllLines(
+            (Join-Path (Resolve-Path $folder).Path "SHA256SUMS.txt"),
+            [string[]]$lines,
+            (New-Object System.Text.UTF8Encoding($false))
+          )
+
+      - name: Upload verified build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: lhtPDF-10.2.2-windows-x64
+          path: |
+            dist/release-10.2.2/*.msi
+            dist/release-10.2.2/*.zip
+            dist/release-10.2.2/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 30

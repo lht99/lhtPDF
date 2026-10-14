@@ -56,7 +56,7 @@ const AR_DAYS: [&str; 7] = ["الأحد", "الاثنين", "الثلاثاء", 
 
 /// The languages month and weekday names can be written in (Preferences ▸ Date format ▸ Language):
 /// the interface languages, in the same order and with the same names.
-pub static DATE_LANGUAGES: [DateLanguage; 22] = [
+pub static DATE_LANGUAGES: [DateLanguage; 23] = [
     DateLanguage {
         code: "en",
         name: "English",
@@ -65,6 +65,28 @@ pub static DATE_LANGUAGES: [DateLanguage; 22] = [
         months_short: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
         days: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
         days_short: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+    },
+    DateLanguage {
+        code: "vi",
+        name: "Tiếng Việt",
+        months: [
+            "tháng 1", "tháng 2", "tháng 3", "tháng 4",
+            "tháng 5", "tháng 6", "tháng 7", "tháng 8",
+            "tháng 9", "tháng 10", "tháng 11", "tháng 12",
+        ],
+        months_with_day: None,
+        months_short: [
+            "Th1", "Th2", "Th3", "Th4",
+            "Th5", "Th6", "Th7", "Th8",
+            "Th9", "Th10", "Th11", "Th12",
+        ],
+        days: [
+            "Chủ nhật", "Thứ hai", "Thứ ba", "Thứ tư",
+            "Thứ năm", "Thứ sáu", "Thứ bảy",
+        ],
+        days_short: [
+            "CN", "T2", "T3", "T4", "T5", "T6", "T7",
+        ],
     },
     DateLanguage {
         code: "ja",
@@ -553,6 +575,27 @@ mod tests {
         format_day(fmt, DAY, date_language(code).unwrap())
     }
 
+    #[test]
+    fn vietnamese_date_formatting() {
+        let vi = date_language("vi").expect("Vietnamese date language");
+
+        assert_eq!(
+            format_day("d mmmm yyyy", DAY, vi),
+            "7 tháng 3 2026"
+        );
+
+        assert_eq!(
+            format_day("dd/mm/yyyy", DAY, vi),
+            "07/03/2026"
+        );
+
+        assert_eq!(
+            format_day("dddd, d mmmm yyyy", DAY, vi),
+            "Thứ bảy, 7 tháng 3 2026"
+        );
+
+        assert_eq!(date_language("VI").map(|l| l.code), Some("vi"));
+    }
     #[test]
     fn presets_write_the_day_in_their_own_order() {
         let shown: Vec<String> = DATE_FORMATS.iter().map(|f| format_day(f, DAY, EN)).collect();

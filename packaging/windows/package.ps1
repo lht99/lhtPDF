@@ -25,6 +25,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $Root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+$env:LHTPDF_VERSION = "10.2.2"
 
 function Invoke-Native([string] $What, [scriptblock] $Block) {
   Write-Output "==> $What"
@@ -33,7 +34,7 @@ function Invoke-Native([string] $What, [scriptblock] $Block) {
 }
 
 # The version lives in one place: [workspace.package] version in the root Cargo.toml.
-$Version = $env:PDFCRAFT_VERSION
+$Version = "10.2.2"
 if (-not $Version) {
   $inPkg = $false
   foreach ($line in Get-Content (Join-Path $Root 'Cargo.toml')) {
@@ -86,7 +87,8 @@ foreach ($check in @(@('pdfcraft.exe', 2), @('pdfcraft-cli.exe', 3))) {
 $Stage = Join-Path $TargetDir "windows-package\$Arch"
 Remove-Item -Recurse -Force $Stage -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $Stage | Out-Null
-Copy-Item (Join-Path $Bin 'pdfcraft.exe'), (Join-Path $Bin 'pdfcraft-cli.exe') $Stage
+Copy-Item (Join-Path $Bin 'pdfcraft.exe') (Join-Path $Stage 'lhtPDF.exe')
+Copy-Item (Join-Path $Bin 'pdfcraft-cli.exe') (Join-Path $Stage 'lhtPDF-cli.exe')
 # The document icon embeds Lucide artwork: carry its ISC notice and the project licences
 # beside the binaries in both distributions.
 foreach ($f in 'LICENSE-MIT', 'LICENSE-APACHE', 'NOTICE') {
@@ -94,7 +96,7 @@ foreach ($f in 'LICENSE-MIT', 'LICENSE-APACHE', 'NOTICE') {
 }
 Copy-Item (Join-Path $Root 'assets\app-icon\LICENSE-document.txt') $Stage
 
-& (Join-Path $PSScriptRoot 'sign.ps1') (Join-Path $Stage 'pdfcraft.exe') (Join-Path $Stage 'pdfcraft-cli.exe')
+& (Join-Path $PSScriptRoot 'sign.ps1') (Join-Path $Stage 'lhtPDF.exe') (Join-Path $Stage 'lhtPDF-cli.exe')
 
 # OCR models (#103): the app looks in models\ beside pdfcraft.exe. `cargo xtask models` fetches every
 # ATTRIBUTION.toml `kind = "model"` file (verified by SHA-256) with its licence and ATTRIBUTION.txt;
@@ -109,7 +111,7 @@ if (-not (Test-Path (Join-Path $Models 'ATTRIBUTION.txt')) -or -not (Get-ChildIt
 }
 
 # ---- MSI ---------------------------------------------------------------------------------------
-$Msi = Join-Path $Dist "pdfcraft-$Version-windows-$Arch.msi"
+$Msi = Join-Path $Dist "lhtPDF-$Version-windows-$Arch.msi"
 Invoke-Native 'wix build' {
   wix build (Join-Path $PSScriptRoot 'pdfcraft.wxs') -arch $Arch `
     (Join-Path $PSScriptRoot 'installer-ui.wxs') `
@@ -124,7 +126,7 @@ Remove-Item -Force -ErrorAction SilentlyContinue ([IO.Path]::ChangeExtension($Ms
 & (Join-Path $PSScriptRoot 'sign.ps1') $Msi
 
 # ---- portable zip ------------------------------------------------------------------------------
-$Portable = Join-Path $TargetDir "windows-package\pdfcraft-$Version-windows-$Arch-portable"
+$Portable = Join-Path $TargetDir "windows-package\lhtPDF-$Version-windows-$Arch-portable"
 Remove-Item -Recurse -Force $Portable -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $Portable | Out-Null
 Copy-Item (Join-Path $Stage '*.exe') $Portable
@@ -148,7 +150,7 @@ if ($env:CRAFT_FONTS_DIR) {
 # digital IDs go to PdfCraftData\ next to the exe instead of %APPDATA% (#157; see
 # crates/ui-egui/src/portable.rs).
 Copy-Item (Join-Path $PSScriptRoot 'portable.txt') $Portable
-$Zip = Join-Path $Dist "pdfcraft-$Version-windows-$Arch-portable.zip"
+$Zip = Join-Path $Dist "lhtPDF-$Version-windows-$Arch-portable.zip"
 Remove-Item -Force $Zip -ErrorAction SilentlyContinue
 Compress-Archive -Path $Portable -DestinationPath $Zip
 
@@ -156,7 +158,7 @@ Compress-Archive -Path $Portable -DestinationPath $Zip
 # here; .github/workflows/windows-arm64.yml installs and runs it on ARM64 instead.
 $HostArch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant()
 if ($Arch -ne 'arm64' -or $HostArch -eq 'arm64') {
-  Invoke-Native 'pdfcraft-cli --version' { & (Join-Path $Stage 'pdfcraft-cli.exe') --version }
+  Invoke-Native 'pdfcraft-cli --version' { & (Join-Path $Stage 'lhtPDF-cli.exe') --version }
 } else {
   Write-Output "skipping pdfcraft-cli --version: an $Arch build doesn't run on this $HostArch machine"
 }

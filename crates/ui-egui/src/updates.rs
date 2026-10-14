@@ -65,6 +65,14 @@ pub(crate) struct Updates {
 impl PdfCraftApp {
     /// Help ▸ Check for updates: ask for the latest release and show the outcome.
     pub fn check_for_updates(&mut self) {
+        if option_env!("LHTPDF_VERSION").is_some() {
+            self.updates.open = true;
+            self.updates.check = Check::Done(Err(
+                "lhtPDF updates are not configured yet.".into()
+            ));
+            return;
+        }
+
         let Some(source) = self.update_source.clone() else {
             self.open_url(RELEASES_PAGE);
             return;
@@ -136,7 +144,7 @@ pub(crate) fn dialog(app: &mut PdfCraftApp, ctx: &egui::Context) {
             }
             Check::Done(Ok(r)) if is_newer(&r.version, current) => {
                 let version = r.version.trim_start_matches(['v', 'V']);
-                ui.label(egui::RichText::new(crate::i18n::fmt(tl!("PdfCraft {v} is available."), &[("v", version)])).strong());
+                ui.label(egui::RichText::new(crate::i18n::fmt(tl!("lhtPDF {v} is available."), &[("v", version)])).strong());
                 ui.label(
                     egui::RichText::new(crate::i18n::fmt(
                         tl!("You have version {c}. Download the new version from its release page."),
@@ -147,25 +155,41 @@ pub(crate) fn dialog(app: &mut PdfCraftApp, ctx: &egui::Context) {
                 download = Some(r.url.clone());
             }
             Check::Done(Ok(_)) => {
-                ui.label(crate::i18n::fmt(tl!("PdfCraft {c} is up to date."), &[("c", current)]));
+                ui.label(crate::i18n::fmt(tl!("lhtPDF {c} is up to date."), &[("c", current)]));
             }
             Check::Done(Err(e)) => {
-                ui.label(crate::i18n::fmt(tl!("Couldn't check for updates: {e}"), &[("e", &e.to_string())]));
-                ui.label(
-                    egui::RichText::new(crate::i18n::fmt(
-                        tl!("You have version {c}. All releases are listed at {page}."),
-                        &[("c", current), ("page", RELEASES_PAGE)],
-                    ))
-                    .color(t.text_muted),
-                );
+                if option_env!("LHTPDF_VERSION").is_some() {
+                    ui.label("Automatic update checking is not configured yet.");
+                    ui.hyperlink_to(
+                        "Website & Support: https://letuan.io.vn",
+                        "https://letuan.io.vn",
+                    );
+                } else {
+                    ui.label(crate::i18n::fmt(tl!("Couldn't check for updates: {e}"), &[("e", &e.to_string())]));
+                    ui.label(
+                        egui::RichText::new(crate::i18n::fmt(
+                            tl!("You have version {c}. All releases are listed at {page}."),
+                            &[("c", current), ("page", RELEASES_PAGE)],
+                        ))
+                        .color(t.text_muted),
+                    );
+                }
             }
         }
         ui.add_space(10.0);
-        ui.label(
-            egui::RichText::new(tl!("Asks GitHub for the latest release. Nothing is downloaded or installed automatically."))
-                .color(t.text_muted)
-                .small(),
-        );
+        if option_env!("LHTPDF_VERSION").is_some() {
+            ui.label(
+                egui::RichText::new("lhtPDF does not download or install updates automatically.")
+                    .color(t.text_muted)
+                    .small(),
+            );
+        } else {
+            ui.label(
+                egui::RichText::new(tl!("Asks GitHub for the latest release. Nothing is downloaded or installed automatically."))
+                    .color(t.text_muted)
+                    .small(),
+            );
+        }
         ui.add_space(12.0);
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             if let Some(url) = download.take() {

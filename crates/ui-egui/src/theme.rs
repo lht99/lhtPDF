@@ -220,6 +220,8 @@ pub const SYSTEM_FALLBACK: &str = "system-fallback";
 pub const SYSTEM_DEVANAGARI_FALLBACK: &str = "system-devanagari-fallback";
 /// The name of the installed Telugu face [`installed_font_definitions`] may add.
 pub const SYSTEM_TELUGU_FALLBACK: &str = "system-telugu-fallback";
+/// The name of the installed Korean Hangul face.
+pub const SYSTEM_KOREAN_FALLBACK: &str = "system-korean-fallback";
 
 /// What [`install_fonts_for`] installs: [`font_definitions_for`], then, on desktop, one face
 /// already installed on this machine. It only draws characters no embedded face has.
@@ -268,6 +270,14 @@ pub fn installed_font_definitions(cjk: CjkPreference) -> FontDefinitions {
                     Need::Hans | Need::Hant => stack.iter().position(|n| japanese.contains(n)),
                 };
                 stack.insert(at.unwrap_or(stack.len()), SYSTEM_FALLBACK.to_owned());
+            }
+        }
+
+        // Append Korean after the language-specific Chinese system fallback.
+        if let Some(data) = crate::system_fonts::korean_fallback() {
+            fonts.font_data.insert(SYSTEM_KOREAN_FALLBACK.to_owned(), data);
+            for stack in fonts.families.values_mut() {
+                stack.push(SYSTEM_KOREAN_FALLBACK.to_owned());
             }
         }
     }
@@ -680,6 +690,77 @@ mod tests {
                 for bg in [t.chrome, t.panel, t.card, t.pasteboard] {
                     let r = contrast(fg, bg);
                     assert!(r >= 4.5, "{kind:?} {name} on {bg:?}: {r:.2}:1, WCAG AA needs 4.5:1");
+                }
+            }
+        }
+    }
+
+
+    #[test]
+    fn korean_filename_has_glyphs_in_all_ui_families() {
+        if !cfg!(windows) {
+            return;
+        }
+
+        let mut fonts = Fonts::new(
+            TextOptions::default(),
+            installed_font_definitions(CjkPreference::Default),
+        );
+
+        let filename = "\u{C548}\u{B155}\u{D558}\u{C138}\u{C694}_\u{D55C}\u{AE00}_\u{BB38}\u{C11C}.pdf";
+
+        for family in [
+            FontFamily::Proportional,
+            FontFamily::Monospace,
+            FontFamily::Name("medium".into()),
+            FontFamily::Name("semibold".into()),
+        ] {
+            let id = FontId::new(16.0, family.clone());
+
+            assert!(
+                fonts.has_glyphs(&id, filename),
+                "Missing Korean filename glyphs in {family:?}"
+            );
+        }
+    }
+    #[test]
+    fn korean_fallback_preserves_cjk_priority() {
+        for preference in [
+            CjkPreference::Default,
+            CjkPreference::SimplifiedChinese,
+            CjkPreference::TraditionalChinese,
+        ] {
+            let fonts = installed_font_definitions(preference);
+
+            for family in [
+                FontFamily::Proportional,
+                FontFamily::Monospace,
+                FontFamily::Name("medium".into()),
+                FontFamily::Name("semibold".into()),
+            ] {
+                let stack = &fonts.families[&family];
+
+                let Some(korean_pos) = stack
+                    .iter()
+                    .position(|name| name == SYSTEM_KOREAN_FALLBACK)
+                else {
+                    continue;
+                };
+
+                assert_eq!(
+                    korean_pos,
+                    stack.len() - 1,
+                    "Korean fallback must be last: {family:?}"
+                );
+
+                if let Some(chinese_pos) = stack
+                    .iter()
+                    .position(|name| name == SYSTEM_FALLBACK)
+                {
+                    assert!(
+                        chinese_pos < korean_pos,
+                        "Chinese/system fallback must precede Korean"
+                    );
                 }
             }
         }

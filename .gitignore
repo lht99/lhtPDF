@@ -9,3 +9,41 @@ plan/
 /assets/models
 # A craft-fonts checkout used as the optional CRAFT_FONTS_DIR build input (CI and releases put it here).
 /craft-fonts
+# lhtPDF development backups and temporary files
+*.bak
+*.bak-*
+*.bak.*
+*.old
+*.old-*
+*.tmp
+*.temp
+*.log
+
+# Local signing credentials and private keys
+*.pfx
+*.p12
+*.p8
+*.key
+*.pem
+*.snk
+*.pvk
+*.spc
+
+# Environment variables and local credentials
+.env
+.env.*
+!.env.example
+!.env.sample
+*.secrets
+secrets.json
+credentials.json
+
+# Local editor and operating-system files
+.vs/
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
+
+# Accidental local output file
+/-

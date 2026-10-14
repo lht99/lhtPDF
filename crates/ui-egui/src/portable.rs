@@ -1,5 +1,5 @@
 //! Portable mode (#157): a marker file beside the executable ([`MARKERS`]) keeps the settings,
-//! log files, crash-recovery autosaves and new digital IDs in `<exe dir>/PdfCraftData`, so a
+//! log files, crash-recovery autosaves and new digital IDs in `<exe dir>/lhtPDFData`, so a
 //! portable copy (on a USB stick, say) writes nothing to `%APPDATA%` or `%LOCALAPPDATA%`. The
 //! Windows portable zip ships with `portable.txt`; the MSI doesn't. PhotoCraft uses the same
 //! scheme (`photocraft/apps/photocraft/src/app_dirs.rs`).
@@ -13,12 +13,14 @@ use std::sync::OnceLock;
 /// Files beside the executable that switch on portable mode (either one; contents are ignored).
 pub const MARKERS: [&str; 2] = ["portable.txt", "PdfCraft.portable"];
 /// The data folder created beside the executable in portable mode.
-pub const DATA_DIR: &str = "PdfCraftData";
+pub const DATA_DIR: &str = "lhtPDFData";
+/// Legacy portable data directory, retained for existing installations.
+pub const LEGACY_DATA_DIR: &str = "PdfCraftData";
 
 /// The outcome of looking for a portable marker.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Portable {
-    /// `<exe dir>/PdfCraftData` when portable mode is on, `None` otherwise.
+    /// `<exe dir>/lhtPDFData` when portable mode is on, `None` otherwise.
     pub dir: Option<PathBuf>,
     /// Set when a marker was found but its data folder can't be written.
     pub unwritable: Option<Unwritable>,
@@ -71,7 +73,18 @@ pub fn resolve(exe_dir: Option<&Path>) -> Portable {
     let Some((exe_dir, marker)) = exe_dir.and_then(|d| find_marker(d).map(|m| (d, m))) else {
         return Portable::default();
     };
-    let folder = exe_dir.join(DATA_DIR);
+    let preferred = exe_dir.join(DATA_DIR);
+    let legacy = exe_dir.join(LEGACY_DATA_DIR);
+
+    // Preserve existing portable settings without moving or overwriting them.
+    let folder = if preferred.exists() {
+        preferred
+    } else if legacy.is_dir() {
+        legacy
+    } else {
+        preferred
+    };
+
     match ensure_writable(&folder) {
         Ok(()) => Portable { dir: Some(folder), unwritable: None },
         Err(e) => Portable { dir: None, unwritable: Some(Unwritable { marker, folder, error: e.to_string() }) },
@@ -140,6 +153,53 @@ mod tests {
         let _ = std::fs::remove_dir_all(&exe);
     }
 
+    #[test]
+    fn legacy_portable_data_is_preserved() {
+        let exe = temp("legacy");
+        std::fs::write(exe.join("portable.txt"), b"").unwrap();
+
+        let legacy = exe.join(LEGACY_DATA_DIR);
+        std::fs::create_dir_all(&legacy).unwrap();
+        std::fs::write(legacy.join("app.ron"), b"legacy-settings").unwrap();
+
+        let p = resolve(Some(&exe));
+
+        assert_eq!(p.dir, Some(legacy.clone()));
+        assert_eq!(
+            std::fs::read(legacy.join("app.ron")).unwrap(),
+            b"legacy-settings"
+        );
+        assert!(!exe.join(DATA_DIR).exists());
+
+        let _ = std::fs::remove_dir_all(&exe);
+    }
+
+    #[test]
+    fn new_portable_data_takes_priority_over_legacy() {
+        let exe = temp("priority");
+        std::fs::write(exe.join("portable.txt"), b"").unwrap();
+
+        let preferred = exe.join(DATA_DIR);
+        let legacy = exe.join(LEGACY_DATA_DIR);
+
+        std::fs::create_dir_all(&preferred).unwrap();
+        std::fs::create_dir_all(&legacy).unwrap();
+
+        std::fs::write(preferred.join("app.ron"), b"new-settings").unwrap();
+        std::fs::write(legacy.join("app.ron"), b"old-settings").unwrap();
+
+        assert_eq!(resolve(Some(&exe)).dir, Some(preferred.clone()));
+        assert_eq!(
+            std::fs::read(preferred.join("app.ron")).unwrap(),
+            b"new-settings"
+        );
+        assert_eq!(
+            std::fs::read(legacy.join("app.ron")).unwrap(),
+            b"old-settings"
+        );
+
+        let _ = std::fs::remove_dir_all(&exe);
+    }
     #[test]
     fn a_marker_folder_is_not_a_marker() {
         let exe = temp("dir-marker");
