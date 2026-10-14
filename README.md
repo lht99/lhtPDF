@@ -1,115 +1,137 @@
+<div align="center">
+
+![Banner lhtPDF](assets/branding/lhtpdf-banner.png)
+
 # lhtPDF
 
-**lhtPDF** is a Windows PDF application based on the open-source
-[PdfCraft](https://github.com/storytold/pdfcraft) project.
+### Làm việc với PDF đơn giản hơn
 
-**Website & Support:** https://letuan.io.vn
+**Ứng dụng đọc, chỉnh sửa và xử lý tài liệu PDF dành cho Windows, hỗ trợ tiếng Việt.**
 
-## Features
+[![Phiên bản](https://img.shields.io/badge/Version-10.2.2-blue)](https://github.com/lht99/lhtPDF/releases/tag/v10.2.2)
+[![Windows](https://img.shields.io/badge/Windows-x64-0078D4)](https://github.com/lht99/lhtPDF/releases)
+[![MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE-MIT)
+[![Apache](https://img.shields.io/badge/License-Apache_2.0-green)](LICENSE-APACHE)
 
-- Open and view PDF documents.
-- Organize, combine and split PDF files.
-- Edit and annotate PDF documents.
-- Work with PDF forms.
-- Recognize text using OCR models.
-- Process and export PDF documents.
-- English and Vietnamese interface languages.
+**[TẢI LHTPDF](https://github.com/lht99/lhtPDF/releases/tag/v10.2.2)** |
+**[TRANG CHỦ](https://letuan.io.vn)** |
+**[GÓP Ý / BÁO LỖI](https://github.com/lht99/lhtPDF/issues)**
 
-Some features may depend on the application build and bundled components.
+</div>
 
-## Download
+---
 
-Download the latest builds from the **GitHub Releases** section
-of the lhtPDF repository.
+## Giới thiệu
 
-### Windows x64
+**lhtPDF** là ứng dụng Windows giúp người dùng mở, xem, chỉnh sửa và xử lý tài liệu PDF.
 
-| File | Description |
+Phần mềm được phát triển dựa trên dự án mã nguồn mở [PdfCraft](https://github.com/storytold/pdfcraft), với bộ nhận diện lhtPDF và giao diện hỗ trợ tiếng Việt.
+
+Một số chức năng phụ thuộc vào phiên bản ứng dụng và các thành phần được đóng gói.
+
+## Tính năng nổi bật
+
+| Tính năng | Mô tả |
 | --- | --- |
-| `lhtPDF-10.2.2-windows-x64.msi` | Windows installer |
-| `lhtPDF-10.2.2-windows-x64-portable.zip` | Portable version |
-| `SHA256SUMS.txt` | SHA-256 checksums, when available |
+| 📖 Đọc PDF | Mở và xem tài liệu PDF |
+| ✏️ Chỉnh sửa | Chỉnh sửa và chú thích tài liệu |
+| 📑 Quản lý trang | Sắp xếp, ghép và tách PDF |
+| 📝 Biểu mẫu | Làm việc với biểu mẫu PDF |
+| 🔍 OCR | Nhận dạng văn bản trong tài liệu |
+| 📤 Xuất PDF | Xử lý và xuất tài liệu PDF |
+| 🌐 Tiếng Việt | Giao diện tiếng Việt và tiếng Anh |
 
-### Windows SmartScreen
+## Biểu tượng tài liệu
 
-The Windows installer and portable application may be unsigned.
+<div align="center">
 
-Windows SmartScreen may display a warning when downloading or
-running an unsigned or unfamiliar application.
+<img src="assets/branding/lhtpdf-document-icon.png" alt="Biểu tượng tài liệu lhtPDF" width="180">
 
-Only download releases from the official lhtPDF repository
-or the project website.
+</div>
 
-## Build from source
+## Tải xuống
 
-### Requirements
+**Phiên bản hiện tại: lhtPDF 10.2.2 — Windows x64**
 
-- Rust stable with the Windows MSVC target.
+Bản phát hành hiện được đánh dấu **Pre-release**.
+
+| Tệp | Mô tả |
+| --- | --- |
+| [Bộ cài đặt MSI](https://github.com/lht99/lhtPDF/releases/download/v10.2.2/lhtPDF-10.2.2-windows-x64.msi) | Cài đặt lhtPDF trên Windows |
+| [Bản Portable ZIP](https://github.com/lht99/lhtPDF/releases/download/v10.2.2/lhtPDF-10.2.2-windows-x64-portable.zip) | Giải nén và chạy ứng dụng |
+| [SHA256SUMS.txt](https://github.com/lht99/lhtPDF/releases/download/v10.2.2/SHA256SUMS.txt) | Kiểm tra mã SHA-256 |
+
+### Lưu ý Windows SmartScreen
+
+Ứng dụng có thể chưa được ký số bằng chứng thư được Windows tin cậy, vì vậy Windows SmartScreen có thể hiển thị cảnh báo.
+
+Chỉ tải phần mềm từ kho GitHub chính thức hoặc website dự án. Nên kiểm tra mã SHA-256 trước khi sử dụng.
+
+## Hướng dẫn sử dụng
+
+**Bản cài đặt MSI:** Tải tệp MSI, mở tệp và làm theo hướng dẫn cài đặt.
+
+**Bản Portable:** Tải ZIP, giải nén và chạy ứng dụng trong thư mục đã giải nén.
+
+## Biên dịch từ mã nguồn
+
+### Yêu cầu
+
+- Rust stable với Windows MSVC target.
 - Visual Studio C++ Build Tools.
 - Windows SDK.
-- WiX Toolset 5.0.2 for MSI packaging.
-- Internet access to download OCR model assets.
+- WiX Toolset 5.0.2 để đóng gói MSI.
+- Kết nối Internet khi cần tải tài nguyên mô hình OCR.
 
-### Build GUI and CLI
+### Build ứng dụng
 
-Run the following command from the repository root:
+    cargo build --locked --release --target x86_64-pc-windows-msvc -p pdfcraft -p pdfcraft-cli
 
-```powershell
-cargo build --locked --release --target x86_64-pc-windows-msvc -p pdfcraft -p pdfcraft-cli
-```
+### Đóng gói Windows MSI và Portable
 
-The original Rust crate names remain `pdfcraft` for source compatibility.
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File packaging/windows/package.ps1 -Arch x64
 
-### Build Windows MSI and Portable ZIP
+Tên crate Rust nội bộ vẫn được giữ là `pdfcraft` để tương thích với mã nguồn gốc.
 
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File packaging/windows/package.ps1 -Arch x64
-```
+## Ghi công dự án gốc
 
-The packaging script generates MSI and Portable ZIP distributions.
+lhtPDF là dự án phát triển độc lập dựa trên mã nguồn mở **PdfCraft**.
 
-## Languages
+**Dự án gốc:** https://github.com/storytold/pdfcraft
 
-The lhtPDF interface supports:
+Xin chân thành cảm ơn các tác giả, nhà phát triển và cộng đồng đóng góp cho PdfCraft đã xây dựng và chia sẻ nền tảng mã nguồn mở.
 
-- English
-- Tiếng Việt (Vietnamese)
+Các thông báo bản quyền, ghi công tác giả và giấy phép liên quan được giữ nguyên.
 
-## Version
+Tài liệu tham khảo:
 
-Current lhtPDF Windows product version: **10.2.2**.
+- [README dự án gốc](README-UPSTREAM.md)
+- [Thông tin ghi công](ATTRIBUTION.md)
+- [Thông báo bản quyền](NOTICE)
 
-Internal Rust crate versions may differ from the Windows product version.
+lhtPDF không phải bản phát hành chính thức của ArtCraft. Tên thương mại, nhãn hiệu và logo ArtCraft không thuộc phạm vi giấy phép mã nguồn.
 
-## Original project and attribution
+## Giấy phép
 
-lhtPDF is an independently maintained derivative of
-the open-source **PdfCraft** project.
-
-Original source repository:
-
-https://github.com/storytold/pdfcraft
-
-lhtPDF is not an official ArtCraft release.
-
-Copyright notices, contributor attribution, and applicable
-third-party licenses from the original project are preserved.
-
-For reference, see [README-UPSTREAM.md](README-UPSTREAM.md).
-
-## License
-
-The underlying PdfCraft source code is dual-licensed under:
+Mã nguồn nền tảng PdfCraft được cấp phép kép:
 
 - [MIT License](LICENSE-MIT)
 - [Apache License 2.0](LICENSE-APACHE)
 
-See [NOTICE](NOTICE) and [ATTRIBUTION.md](ATTRIBUTION.md)
-for additional copyright and third-party attribution.
+Các thành phần bên thứ ba tuân theo giấy phép tương ứng.
 
-ArtCraft names, trademarks and logos are not covered by
-the source code license.
+## Liên hệ và hỗ trợ
 
-## Support
+**Website:** https://letuan.io.vn
 
-Website: https://letuan.io.vn
+**GitHub:** https://github.com/lht99/lhtPDF
+
+**Góp ý và báo lỗi:** https://github.com/lht99/lhtPDF/issues
+
+---
+
+<div align="center">
+
+**lhtPDF — Làm việc với PDF đơn giản hơn**
+
+</div>
