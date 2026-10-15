@@ -51,15 +51,15 @@ Một số chức năng phụ thuộc vào phiên bản ứng dụng và các th
 
 ## Tải xuống
 
-**Phiên bản hiện tại: lhtPDF 10.2.2 — Windows x64**
+**Phiên bản hiện tại: lhtPDF 2026.15.10 — Windows x64**
 
-Bản phát hành hiện được đánh dấu **Pre-release**.
+Bản phát hành hiện được đánh dấu **release**.
 
 | Tệp | Mô tả |
 | --- | --- |
-| [Bộ cài đặt MSI](https://github.com/lht99/lhtPDF/releases/download/v10.2.2/lhtPDF-10.2.2-windows-x64.msi) | Cài đặt lhtPDF trên Windows |
-| [Bản Portable ZIP](https://github.com/lht99/lhtPDF/releases/download/v10.2.2/lhtPDF-10.2.2-windows-x64-portable.zip) | Giải nén và chạy ứng dụng |
-| [SHA256SUMS.txt](https://github.com/lht99/lhtPDF/releases/download/v10.2.2/SHA256SUMS.txt) | Kiểm tra mã SHA-256 |
+| [Bộ cài đặt MSI](https://github.com/lht99/lhtPDF/releases/download/2026.15.10/lhtPDF-2026.15.10-windows-x64.msi) | Cài đặt lhtPDF trên Windows |
+| [Bản Portable ZIP](https://github.com/lht99/lhtPDF/releases/download/2026.15.10/lhtPDF-2026.15.10-windows-x64-portable.zip) | Giải nén và chạy ứng dụng |
+| [SHA256SUMS.txt](https://github.com/lht99/lhtPDF/releases/download/2026.15.10/SHA256SUMS.txt) | Kiểm tra mã SHA-256 |
 
 ### Lưu ý Windows SmartScreen
 
