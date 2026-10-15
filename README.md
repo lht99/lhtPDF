@@ -8,8 +8,13 @@
 
 **Ứng dụng đọc, chỉnh sửa và xử lý tài liệu PDF dành cho Windows, hỗ trợ tiếng Việt.**
 
-[![Phiên bản](https://img.shields.io/badge/Version-2026.15.10-blue)](https://github.com/lht99/lhtPDF/releases/tag/v2026.15.10)
-[![Windows](https://img.shields.io/badge/Windows-x64-0078D4)](https://github.com/lht99/lhtPDF/releases)
+![Version](https://img.shields.io/github/v/release/lht99/lhtPDF?label=Version)
+
+![Downloads](https://img.shields.io/github/downloads/lht99/lhtPDF/total?label=Total%20Downloads)
+
+![Latest Downloads](https://img.shields.io/github/downloads/lht99/lhtPDF/latest/total?label=Latest%20Downloads)
+
+[Download Latest Release](https://github.com/lht99/lhtPDF/releases/latest)
 [![MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE-MIT)
 [![Apache](https://img.shields.io/badge/License-Apache_2.0-green)](LICENSE-APACHE)
 
