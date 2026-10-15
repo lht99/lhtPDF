@@ -92,10 +92,10 @@ fn recognize_text_can_read_pictures_on_pages_with_text() {
     h.run_steps(4);
     assert!(h.state_mut().execute("ocr.recognize"));
     h.run_steps(2);
-    assert!(h.state().ocr_draft.settings().skip_text_pages, "pages with text are skipped by default");
+    assert!(!h.state().ocr_draft.settings().skip_text_pages, "hybrid OCR includes pages with text by default");
     h.get_by_label("Also recognize pages that already have text").click();
     h.run_steps(2);
-    assert!(!h.state().ocr_draft.settings().skip_text_pages);
+    assert!(h.state().ocr_draft.settings().skip_text_pages);
     if !pdfcraft_engine::ocr::available() {
         eprintln!("skipped: OCR models not installed");
         return;

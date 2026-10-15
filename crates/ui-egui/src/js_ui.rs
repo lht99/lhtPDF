@@ -556,20 +556,12 @@ fn date_format(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) {
         let follow = crate::i18n::fmt(tl!("Same as interface ({language})"), &[("language", interface)]);
         let current = app.session.date_language().map(str::to_string);
         ui.horizontal_wrapped(|ui| {
-            if ui.selectable_label(
-                current.is_none(),
-                follow.as_str()
-            ).clicked() {
+            if ui.selectable_label(current.is_none(), follow.as_str()).clicked() {
                 let _ = app.session.set_date_language(None);
             }
 
-            for l in DATE_LANGUAGES.iter().filter(
-                |l| matches!(l.code, "en" | "vi")
-            ) {
-                if ui.selectable_label(
-                    current.as_deref() == Some(l.code),
-                    l.name
-                ).clicked() {
+            for l in DATE_LANGUAGES.iter().filter(|l| matches!(l.code, "en" | "vi")) {
+                if ui.selectable_label(current.as_deref() == Some(l.code), l.name).clicked() {
                     let _ = app.session.set_date_language(Some(l.code));
                 }
             }

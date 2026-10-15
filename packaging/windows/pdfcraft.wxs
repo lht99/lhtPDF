@@ -57,6 +57,9 @@
     <StandardDirectory Id="ProgramFiles6432Folder">
       <Directory Id="INSTALLFOLDER" Name="lhtPDF">
         <Directory Id="ModelsFolder" Name="models" />
+        <Directory Id="TesseractFolder" Name="tesseract">
+          <Directory Id="TessdataFolder" Name="tessdata" />
+        </Directory>
       </Directory>
     </StandardDirectory>
     <StandardDirectory Id="ProgramMenuFolder" />
@@ -65,6 +68,8 @@
     <Feature Id="Main" Title="lhtPDF" Level="1">
       <ComponentGroupRef Id="PdfcraftFiles" />
       <ComponentGroupRef Id="PdfcraftModels" />
+      <ComponentGroupRef Id="PdfcraftTesseract" />
+      <ComponentGroupRef Id="PdfcraftTessdata" />
     </Feature>
   </Package>
 
@@ -182,6 +187,12 @@
       <Component Id="PdfcraftNotice">
         <File Id="PdfcraftNoticeFile" Source="$(var.BinDir)\NOTICE" KeyPath="yes" />
       </Component>
+      <Component Id="LhtpdfBeVietnamProLicense">
+        <File Id="LhtpdfBeVietnamProLicenseFile" Source="$(var.BinDir)\OFL-BeVietnamPro.txt" KeyPath="yes" />
+      </Component>
+      <Component Id="LhtpdfGowunDodumLicense">
+        <File Id="LhtpdfGowunDodumLicenseFile" Source="$(var.BinDir)\OFL-GowunDodum.txt" KeyPath="yes" />
+      </Component>
     </ComponentGroup>
 
     <!-- OCR models (#103), with their licences and ATTRIBUTION.txt, in models\ beside pdfcraft.exe
@@ -189,6 +200,14 @@
          component each, so new models ship without naming them here. -->
     <ComponentGroup Id="PdfcraftModels" Directory="ModelsFolder">
       <Files Include="$(var.ModelsDir)\*" />
+    </ComponentGroup>
+    <ComponentGroup Id="PdfcraftTesseract" Directory="TesseractFolder">
+      <Files Include="$(var.TesseractDir)\*.exe" />
+      <Files Include="$(var.TesseractDir)\*.dll" />
+      <Files Include="$(var.TesseractDir)\LICENSE-Tesseract.txt" />
+    </ComponentGroup>
+    <ComponentGroup Id="PdfcraftTessdata" Directory="TessdataFolder">
+      <Files Include="$(var.TesseractDir)\tessdata\*.traineddata" />
     </ComponentGroup>
   </Fragment>
 </Wix>

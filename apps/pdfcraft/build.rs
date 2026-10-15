@@ -27,8 +27,8 @@ fn main() {
         .set("LegalCopyright", "Copyright (c) the PdfCraft contributors. MIT OR Apache-2.0.")
         .set("OriginalFilename", "lhtPDF.exe")
         .set("InternalName", "lhtPDF")
-        .set("FileVersion", "10.2.2.0")
-        .set("ProductVersion", "10.2.2.0");
+        .set("FileVersion", "10.3.0.0")
+        .set("ProductVersion", "10.3.0.0");
     if let Err(e) = res.compile() {
         if std::env::var_os("PDFCRAFT_REQUIRE_WINRES").is_some() {
             println!("cargo::error=embedding Windows resources failed: {e}");

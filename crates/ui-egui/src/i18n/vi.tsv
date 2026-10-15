@@ -2609,3 +2609,5 @@ signature pad	Type	Nhập chữ
 	Remove "{name}" from this list? The file itself is not deleted.	Xóa "{name}" khỏi danh sách này? Tệp gốc sẽ không bị xóa.
 	Security settings must allow assistive technology to read the content ("Enable text access for screen reader devices"). Change the document's security to allow it.	Cài đặt bảo mật phải cho phép công nghệ hỗ trợ đọc nội dung ("Cho phép thiết bị đọc màn hình truy cập văn bản"). Hãy thay đổi cài đặt bảo mật của tài liệu để cho phép truy cập.
 	{verb} as "{name}"	{verb} dưới tên "{name}"
+	Next tab	Tab tiếp theo
+	Previous tab	Tab trước

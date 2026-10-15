@@ -73,7 +73,7 @@ impl RenderConfig {
         InterpreterSettings {
             ocg_overrides: self.layers.clone(),
             hide_comments: self.hide_comments,
-            font_resolver: Arc::new(move |query| japanese_fallback(query).or_else(|| standard(query))),
+            font_resolver: Arc::new(move |query| japanese_fallback(query).or_else(|| korean_fallback(query)).or_else(|| standard(query))),
             ..InterpreterSettings::default()
         }
     }
@@ -106,6 +106,54 @@ fn japanese_fallback(query: &FontQuery) -> Option<(FontData, u32)> {
     Some((Arc::new(face.bytes), 0))
 }
 
+/// Use a Korean font installed on Windows for non-embedded Adobe-Korea1 CID fonts.
+/// Font files are read at runtime and are never bundled with lhtPDF.
+#[cfg(windows)]
+fn korean_fallback(query: &FontQuery) -> Option<(FontData, u32)> {
+    use std::sync::OnceLock;
+
+    let FontQuery::Fallback(f) = query else {
+        return None;
+    };
+
+    let collection = f.character_collection.as_ref()?;
+    if collection.family != CidFamily::AdobeKorea1 {
+        return None;
+    }
+
+    static FONT: OnceLock<Option<FontData>> = OnceLock::new();
+
+    FONT.get_or_init(|| {
+        let windir = std::env::var_os("WINDIR").or_else(|| std::env::var_os("SystemRoot"))?;
+
+        let fonts = std::path::PathBuf::from(windir).join("Fonts");
+
+        for name in ["malgun.ttf", "gulim.ttc", "batang.ttc"] {
+            let path = fonts.join(name);
+
+            let Ok(meta) = std::fs::metadata(&path) else {
+                continue;
+            };
+
+            if !meta.is_file() || meta.len() > 32 * 1024 * 1024 {
+                continue;
+            }
+
+            if let Ok(bytes) = std::fs::read(&path) {
+                return Some(Arc::new(bytes));
+            }
+        }
+
+        None
+    })
+    .clone()
+    .map(|font| (font, 0))
+}
+
+#[cfg(not(windows))]
+fn korean_fallback(_: &FontQuery) -> Option<(FontData, u32)> {
+    None
+}
 #[derive(Debug, PartialEq)]
 enum JapaneseFace {
     Mincho,

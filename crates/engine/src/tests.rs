@@ -30,6 +30,143 @@ pub(crate) fn fixture(n: usize) -> Vec<u8> {
     out
 }
 
+/// A PDF whose painted letters are valid but whose Unicode mapping is corrupt.
+/// Helvetica paints GOOD and BROKEN; ToUnicode maps B to U+FFFD.
+fn broken_tounicode_fixture() -> Vec<u8> {
+    let cmap = "/CIDInit /ProcSet findresource begin
+12 dict begin
+begincmap
+/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def
+/CMapName /BrokenUnicode def
+/CMapType 2 def
+1 begincodespacerange
+<00> <FF>
+endcodespacerange
+1 beginbfchar
+<42> <FFFD>
+endbfchar
+endcmap
+CMapName currentdict /CMap defineresource
+pop end end";
+
+    let content = "BT /F1 24 Tf 30 220 Td (GOOD) Tj 0 -65 Td (BROKEN) Tj ET";
+
+    let objs = [
+        b"<< /Type /Catalog /Pages 2 0 R >>".to_vec(),
+        b"<< /Type /Pages /Kids [4 0 R] /Count 1 /MediaBox [0 0 350 300] >>".to_vec(),
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /ToUnicode 6 0 R >>".to_vec(),
+        b"<< /Type /Page /Parent 2 0 R /Contents 5 0 R /Resources << /Font << /F1 3 0 R >> >> >>".to_vec(),
+        format!("<< /Length {} >>\nstream\n{content}\nendstream", content.len()).into_bytes(),
+        format!("<< /Length {} >>\nstream\n{cmap}\nendstream", cmap.len()).into_bytes(),
+    ];
+
+    let mut out = b"%PDF-1.7\n".to_vec();
+    let mut offsets = Vec::new();
+
+    for (i, obj) in objs.iter().enumerate() {
+        offsets.push(out.len());
+        out.extend_from_slice(format!("{} 0 obj\n", i + 1).as_bytes());
+        out.extend_from_slice(obj);
+        out.extend_from_slice(b"\nendobj\n");
+    }
+
+    let xref = out.len();
+    out.extend_from_slice(format!("xref\n0 {}\n0000000000 65535 f \n", objs.len() + 1).as_bytes());
+
+    for offset in offsets {
+        out.extend_from_slice(format!("{offset:010} 00000 n \n").as_bytes());
+    }
+
+    out.extend_from_slice(format!("trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n", objs.len() + 1).as_bytes());
+
+    out
+}
+
+#[test]
+fn broken_tounicode_fixture_exposes_unreliable_glyphs() {
+    let mut session = Session::new().with_clock(|| 1_700_000_000);
+    let id = session.open("broken-unicode.pdf", None, Arc::new(broken_tounicode_fixture()), None).unwrap();
+
+    let doc = session.get(id).unwrap();
+    let mut renderer = pdfcraft_render::PageRenderer::new(doc.bytes.clone(), doc.config.clone());
+
+    let rendered = renderer.render(RenderRequestFor::text(0));
+
+    assert!(rendered.error.is_none(), "{:?}", rendered.error);
+
+    let text = rendered.text.unwrap();
+    let glyphs: Vec<&str> = text.glyphs.iter().map(|g| g.text.as_str()).collect();
+
+    assert!(text.plain_text().contains("GOOD"), "Valid Unicode was lost: {glyphs:?}");
+
+    assert!(glyphs.iter().any(|g| g.contains('\u{fffd}')), "Corrupt ToUnicode mapping was not exposed: {glyphs:?}");
+
+    assert!(
+        text.glyphs.iter().filter(|g| g.text.contains('\u{fffd}')).all(|g| g.rect[2] > g.rect[0] && g.rect[3] > g.rect[1]),
+        "Corrupt Unicode glyph must retain a usable OCR coverage rectangle"
+    );
+}
+#[test]
+fn hybrid_ocr_recovers_broken_tounicode_without_duplicating_good_text() {
+    if !ocr::available() {
+        eprintln!("skipped: OCR models not installed");
+        return;
+    }
+
+    let mut session = Session::new().with_clock(|| 1_700_000_000);
+    let id = session.open("broken-unicode.pdf", None, Arc::new(broken_tounicode_fixture()), None).unwrap();
+
+    let before = page_texts(&session, id)[0].clone();
+
+    assert!(before.contains("GOOD"), "{before}");
+    assert!(before.contains('\u{fffd}'), "{before}");
+
+    let settings = ocr::OcrSettings { skip_text_pages: false, ..Default::default() };
+
+    // Diagnostic only: inspect raw RTEN words before Hybrid OCR coverage filtering.
+    let doc = session.get(id).unwrap();
+    let mut renderer = pdfcraft_render::PageRenderer::new(doc.bytes.clone(), doc.config.clone());
+    let raw_page = renderer.render(pdfcraft_render::RenderRequest { page: 0, scale: settings.dpi / 72.0, ..Default::default() });
+
+    assert!(raw_page.error.is_none(), "{:?}", raw_page.error);
+
+    let raw_ocr = ocr::engine().unwrap().recognize(&raw_page.rgba, raw_page.width, raw_page.height).unwrap();
+
+    eprintln!("RAW OCR WORDS:");
+    for line in &raw_ocr {
+        for word in &line.words {
+            eprintln!("  {:?} at {:?}", word.text, word.rect);
+        }
+    }
+
+    let native_page = renderer.render(RenderRequestFor::text(0));
+    let native_text = native_page.text.unwrap();
+
+    eprintln!("NATIVE GLYPHS:");
+    for glyph in &native_text.glyphs {
+        eprintln!("  {:?} at {:?}", glyph.text, glyph.rect);
+    }
+    let first = session.recognize_text(id, &[], settings.clone()).unwrap();
+
+    assert_eq!(first.len(), 1);
+    assert!(first[0].skipped.is_none(), "{:?}", first[0]);
+
+    let added = first[0].text().to_uppercase();
+
+    assert!(added.contains("BROKEN"), "Hybrid OCR did not recover the broken Unicode word: {added:?}; result: {:?}", first[0]);
+
+    assert!(!added.contains("GOOD"), "Hybrid OCR duplicated valid native text: {added:?}");
+
+    let after = page_texts(&session, id)[0].to_uppercase();
+
+    assert!(after.contains("BROKEN"), "Recovered word is missing from the PDF text layer: {after:?}");
+
+    assert_eq!(after.matches("GOOD").count(), 1, "Valid native text was duplicated: {after:?}");
+
+    let second = session.recognize_text(id, &[], settings).unwrap();
+
+    assert!(second[0].words.is_empty(), "Second Hybrid OCR pass duplicated existing text: {:?}", second[0]);
+}
 fn session_with(n: usize) -> (Session, DocId) {
     let mut s = Session::new().with_clock(|| 1_700_000_000);
     let id = s.open("fixture.pdf", None, Arc::new(fixture(n)), None).expect("opens");
@@ -2651,6 +2788,30 @@ fn recognize_text_reads_a_picture_on_a_page_that_has_text() {
     let count = |s: &Session, word: &str| page_texts(s, id)[0].to_lowercase().matches(word).count();
     assert_eq!((count(&s, "invoice"), count(&s, "brown")), (1, 0));
 
+    // STEP649 diagnostic: inspect native text before skip decision.
+    let diagnostic_doc = s.get(id).unwrap();
+    let mut diagnostic_renderer = pdfcraft_render::PageRenderer::new(diagnostic_doc.bytes.clone(), diagnostic_doc.config.clone());
+    let diagnostic_page = diagnostic_renderer.render(pdfcraft_render::RenderRequest {
+        page: 0,
+        kind: pdfcraft_render::RequestKind::Text,
+        scale: 1.0,
+        ..Default::default()
+    });
+    eprintln!("STEP649 NATIVE GLYPHS:");
+    if let Some(text) = diagnostic_page.text {
+        for (i, glyph) in text.glyphs.iter().enumerate() {
+            eprintln!(
+                "  index={} text={:?} line={:?} space={:?} rect={:?}",
+                i,
+                glyph.text,
+                text.line_of.get(i),
+                text.space_before.get(i),
+                glyph.rect
+            );
+        }
+    } else {
+        eprintln!("  NO NATIVE TEXT");
+    }
     let skipped = s.recognize_text(id, &[], ocr::OcrSettings::default()).unwrap();
     assert!(skipped[0].skipped.is_some(), "pages with text are still skipped by default");
     assert_eq!(s.get(id).unwrap().can_undo(), Some("Add text"), "nothing was added");

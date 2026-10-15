@@ -2305,7 +2305,7 @@ fn run_edit(doc: &mut pdfcraft_cos::Document, edit: &Edit, cx: &mut EditCtx) -> 
         }
         Edit::SetDocumentScript { name, script } => pdfcraft_forms::set_document_script(doc, name, script.as_deref())?,
         Edit::AddOcrText { page, words } => {
-            pdfcraft_edit::stamp(doc, *page, "OCR", pdfcraft_ocr::text_layer(words))?;
+            stamp_unicode_ocr(doc, *page, words)?;
         }
         Edit::EditPageImage { page, index, change } => {
             let img = pdfcraft_edit::page_images(doc, *page)?
@@ -3741,6 +3741,16 @@ impl Session {
         guard(|| write_full(&editor.cos, &opts)).map_err(EditError::Write)?.map(Arc::new).map_err(|e| EditError::Write(e.to_string()))
     }
 
+    /// Check that `bytes`, from [`Self::save_bytes`] or [`Self::save_full_bytes`], reopen as this
+    /// document before they are written (#1698): [`Self::mark_saved`] only finds out after the
+    /// file has been replaced. Same error as `mark_saved`.
+    pub fn check_save(&self, id: DocId, bytes: &Arc<Vec<u8>>) -> Result<(), EditError> {
+        let doc = self.get(id).ok_or(EditError::NoDocument)?;
+        let Some(editor) = doc.editor.as_ref() else { return Ok(()) };
+        pdfcraft_cos::Document::open_with_password(bytes.clone(), editor.keys.reopen.as_deref()).map_err(|e| EditError::Reopen(e.to_string()))?;
+        pdfcraft_render::check_pages(bytes.clone(), doc.password.as_deref(), doc.info.pages.len()).map_err(|e| EditError::Reopen(e.to_string()))
+    }
+
     /// Record a successful save of `bytes` (to `path`, if any): rebase editing on the saved file
     /// so the next save appends only newer edits. Undo history is kept.
     pub fn mark_saved(&mut self, id: DocId, bytes: Arc<Vec<u8>>, path: Option<String>) -> Result<(), EditError> {
@@ -4675,4 +4685,76 @@ pub fn filter_pages(info: &pdfcraft_render::DocInfo, pages: &[usize], parity: Pa
             }
         })
         .collect()
+}
+
+fn stamp_unicode_ocr(doc: &mut pdfcraft_cos::Document, page: usize, words: &[pdfcraft_ocr::PlacedWord]) -> Result<(), EditError> {
+    use std::collections::BTreeMap;
+
+    let ocr_font = |family: &str| -> Result<&'static [u8], EditError> {
+        pdfcraft_fonts::CRAFT_FONTS
+            .iter()
+            .find(|font| font.family == family && font.style == "Regular")
+            .map(|font| font.bytes)
+            .ok_or_else(|| {
+                EditError::Invalid(format!(
+                    "OCR Unicode font '{family}' is unavailable; rebuild with CRAFT_FONTS_DIR pointing to a checkout containing this font"
+                ))
+            })
+    };
+
+    let is_korean = |text: &str| {
+        text.chars().any(|c| {
+            matches!(
+                c as u32,
+                0x1100..=0x11FF
+                    | 0x3130..=0x318F
+                    | 0xA960..=0xA97F
+                    | 0xAC00..=0xD7AF
+                    | 0xD7B0..=0xD7FF
+            )
+        })
+    };
+
+    let mut names = vec![String::new(); words.len()];
+    let mut encoded = vec![Vec::new(); words.len()];
+    let mut widths = vec![0.0; words.len()];
+
+    for korean in [false, true] {
+        let selected: Vec<usize> = words.iter().enumerate().filter_map(|(index, word)| (is_korean(&word.text) == korean).then_some(index)).collect();
+
+        if selected.is_empty() {
+            continue;
+        }
+
+        let font_bytes = ocr_font(if korean { "Gowun Dodum" } else { "Be Vietnam Pro" })?;
+        let mut unique = BTreeMap::<char, usize>::new();
+
+        for &index in &selected {
+            for ch in words[index].text.chars() {
+                let next = unique.len();
+                unique.entry(ch).or_insert(next);
+            }
+        }
+
+        let characters: Vec<char> = unique.keys().copied().collect();
+
+        let (resource, codes, advances) = pdfcraft_edit::text::register_ocr_unicode_font(doc, page, font_bytes, &characters)?;
+
+        let mapping: BTreeMap<char, ([u8; 2], f64)> = characters.into_iter().zip(codes.into_iter().zip(advances)).collect();
+
+        for index in selected {
+            names[index] = resource.clone();
+
+            for ch in words[index].text.chars() {
+                let (code, advance) = mapping.get(&ch).ok_or_else(|| EditError::Invalid("OCR CID mapping missing".into()))?;
+
+                encoded[index].extend_from_slice(code);
+                widths[index] += advance;
+            }
+        }
+    }
+
+    pdfcraft_edit::stamp(doc, page, "OCR", pdfcraft_ocr::unicode_text_layer(words, &names, &encoded, &widths))?;
+
+    Ok(())
 }

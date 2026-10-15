@@ -1,0 +1,20 @@
+lhtPDF Brand Assets
+LicenseRef-lhtPDF-Brand
+
+The lhtPDF branding banner and lhtPDF document branding image
+are owned by the lhtPDF project owner.
+
+All rights reserved.
+
+These assets may be used and distributed as part of official
+lhtPDF software packages and project documentation.
+
+No separate permission to copy, modify, redistribute, sublicense,
+or commercially exploit these brand assets is granted.
+
+This notice applies only to:
+- lhtpdf-banner.png
+- lhtpdf-document-icon.png
+
+It does not change the licences of PdfCraft, its source code,
+third-party dependencies, fonts, or other assets.

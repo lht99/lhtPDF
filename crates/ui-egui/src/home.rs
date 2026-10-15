@@ -40,17 +40,11 @@ pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                         ui.label(egui::RichText::new("lhtPDF").font(theme::semibold(20.0)));
                         ui.vertical(|ui| {
                             ui.label(egui::RichText::new("lhtPDF - Website & Support").font(theme::semibold(15.0)));
-                            ui.label(
-                                egui::RichText::new("Help, feedback and product information at letuan.io.vn")
-                                    .color(t.text_muted),
-                            );
+                            ui.label(egui::RichText::new("Help, feedback and product information at letuan.io.vn").color(t.text_muted));
                         });
                     });
                     ui.add_space(8.0);
-                    ui.hyperlink_to(
-                        "Visit https://letuan.io.vn",
-                        "https://letuan.io.vn",
-                    );
+                    ui.hyperlink_to("Visit https://letuan.io.vn", "https://letuan.io.vn");
                 });
             ui.add_space(22.0);
 

@@ -1104,17 +1104,11 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                         });
                         ui.add_space(6.0);
                         ui.label("lhtPDF - PDF Editor and Reader.");
-                        ui.hyperlink_to(
-                            "Website & Support: https://letuan.io.vn",
-                            "https://letuan.io.vn",
-                        );
+                        ui.hyperlink_to("Website & Support: https://letuan.io.vn", "https://letuan.io.vn");
                         ui.add_space(6.0);
                         ui.label("Based on the open-source PdfCraft project.");
                         ui.label("Special thanks to the original PdfCraft authors and contributors.");
-                        ui.hyperlink_to(
-                            "Original source: github.com/storytold/pdfcraft",
-                            "https://github.com/storytold/pdfcraft",
-                        );
+                        ui.hyperlink_to("Original source: github.com/storytold/pdfcraft", "https://github.com/storytold/pdfcraft");
                         ui.label("MIT OR Apache-2.0. Original copyright notices and third-party attributions are preserved.");
                         ui.label(
                             egui::RichText::new(

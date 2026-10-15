@@ -21,7 +21,7 @@
 // Release builds on Windows are GUI-subsystem programs, so launching the app doesn't open a console
 // window next to it (#57). `--version` and diagnostics then go nowhere when started from a terminal
 // (std ignores the missing console handles, so nothing fails); debug builds keep the console.
-#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+#![cfg_attr(windows, windows_subsystem = "windows")]
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
 use std::cell::Cell;
@@ -71,16 +71,7 @@ fn msi_install_language() -> Option<&'static str> {
         return None;
     }
 
-    let output = std::process::Command::new("reg.exe")
-        .args([
-            "query",
-            r"HKLM\SOFTWARE\lhtPDF",
-            "/v",
-            "InstallLanguage",
-            "/reg:64",
-        ])
-        .output()
-        .ok()?;
+    let output = std::process::Command::new("reg.exe").args(["query", r"HKLM\SOFTWARE\lhtPDF", "/v", "InstallLanguage", "/reg:64"]).output().ok()?;
 
     if !output.status.success() {
         return None;
@@ -91,10 +82,7 @@ fn msi_install_language() -> Option<&'static str> {
     for line in stdout.lines() {
         let fields: Vec<_> = line.split_whitespace().collect();
 
-        if fields.len() >= 3
-            && fields[0].eq_ignore_ascii_case("InstallLanguage")
-            && fields[1].eq_ignore_ascii_case("REG_SZ")
-        {
+        if fields.len() >= 3 && fields[0].eq_ignore_ascii_case("InstallLanguage") && fields[1].eq_ignore_ascii_case("REG_SZ") {
             return match fields[2] {
                 "en" => Some("en"),
                 "vi" => Some("vi"),
@@ -106,9 +94,7 @@ fn msi_install_language() -> Option<&'static str> {
     None
 }
 fn is_first_run() -> bool {
-    settings_dir()
-        .map(|dir| !dir.join("app.ron").is_file())
-        .unwrap_or(false)
+    settings_dir().map(|dir| !dir.join("app.ron").is_file()).unwrap_or(false)
 }
 fn settings_dir() -> Option<std::path::PathBuf> {
     if let Some(dir) = pdfcraft_ui_egui::portable::data_dir() {
@@ -398,8 +384,7 @@ fn app_creator<'a>(
         app.enable_desktop_theme();
         // The system's reopen-windows choice (macOS) starts the preference; a saved choice replaces it.
         app.reopen_last_session = reopen::system_default();
-        let saved_settings = cc.storage
-            .and_then(|s| s.get_string("pdfcraft").or_else(|| s.get_string(LEGACY_STORAGE_KEY)));
+        let saved_settings = cc.storage.and_then(|s| s.get_string("pdfcraft").or_else(|| s.get_string(LEGACY_STORAGE_KEY)));
 
         let has_saved_settings = saved_settings.is_some();
 
@@ -411,7 +396,6 @@ fn app_creator<'a>(
             .and_then(|value| value.get("language").and_then(|v| v.as_str()).map(str::to_owned));
 
         let has_saved_language = saved_language.is_some();
-
 
         if let Some(json) = saved_settings {
             app.restore(&json);
@@ -440,14 +424,10 @@ fn app_creator<'a>(
         // Ask only on the first launch of a genuinely new Portable copy.
 
         // Existing settings and explicit command-line language choices take precedence.
-        let language_on_command_line = options.iter()
-            .any(|(key, _)| key == "language");
+        let language_on_command_line = options.iter().any(|(key, _)| key == "language");
 
         app.portable_language_prompt =
-            pdfcraft_ui_egui::portable::data_dir().is_some()
-            && is_first_run()
-            && !has_saved_settings
-            && !language_on_command_line;
+            pdfcraft_ui_egui::portable::data_dir().is_some() && is_first_run() && !has_saved_settings && !language_on_command_line;
 
         app.integrated_titlebar = integrated;
         app.window_controls = window_controls;

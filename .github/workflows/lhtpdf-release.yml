@@ -8,6 +8,9 @@ permissions:
 
 jobs:
   windows-x64:
+    env:
+      CRAFT_FONTS_DIR: ${{ github.workspace }}/craft-fonts
+      CRAFT_FONTS_REQUIRED: '1'
     runs-on: windows-latest
     timeout-minutes: 120
 
@@ -15,6 +18,13 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
+      - name: Checkout OCR fonts
+        uses: actions/checkout@v4
+        with:
+          repository: lht99/craft-fonts
+          ref: ef38d149f0a6d3b660da8c8b4d2208266e9df349
+          path: craft-fonts
+          persist-credentials: false
       - name: Configure Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -42,20 +52,70 @@ jobs:
         shell: pwsh
         run: cargo test --locked -p pdfcraft-ui-egui --lib
 
+      - name: Install verified Tesseract runtime
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          winget install --id UB-Mannheim.TesseractOCR --exact --version 5.5.3.20260724 --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
+          if ($LASTEXITCODE -ne 0) { throw "Tesseract installation failed: $LASTEXITCODE" }
+
+          $source = "C:\Program Files\Tesseract-OCR"
+          $exe = Join-Path $source "tesseract.exe"
+          if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) {
+            throw "Tesseract executable not found"
+          }
+
+          $expectedExe = "C66F0F12ED76F6AA455DAC97684BBC86756D6A732380BEE09122454CFDA3F420"
+          if ((Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash -ne $expectedExe) {
+            throw "Unexpected Tesseract executable SHA256"
+          }
+
+          $expectedModels = @{
+            eng = "7D4322BD2A7749724879683FC3912CB542F19906C83BCC1A52132556427170B2"
+            vie = "B6B49293D95D0B6DBD8780174627E82C75BE957B6F4ED9862155540D6B00BB45"
+            kor = "6B85E11D9BBF07863B97B3523B1B112844C43E713DF8B66418A081FD1060B3B2"
+            osd = "9CF5D576FCC47564F11265841E5CA839001E7E6F38FF7F7AACF46D15A96B00FF"
+          }
+
+          foreach ($lang in $expectedModels.Keys) {
+            $model = Join-Path $source "tessdata\$lang.traineddata"
+            if (-not (Test-Path -LiteralPath $model -PathType Leaf)) {
+              throw "Missing Tesseract language data: $lang"
+            }
+            if ((Get-FileHash -LiteralPath $model -Algorithm SHA256).Hash -ne $expectedModels[$lang]) {
+              throw "Unexpected Tesseract language data SHA256: $lang"
+            }
+          }
+
+          $license = Join-Path $source "doc\LICENSE"
+          if (-not (Test-Path -LiteralPath $license -PathType Leaf)) {
+            throw "Missing Tesseract licence"
+          }
+
+          $runtime = Join-Path $env:RUNNER_TEMP "lhtpdf-tesseract"
+          New-Item -ItemType Directory -Force -Path $runtime | Out-Null
+          Copy-Item -LiteralPath $exe -Destination $runtime
+          Get-ChildItem -LiteralPath $source -Filter "*.dll" -File |
+            Copy-Item -Destination $runtime
+          Copy-Item -LiteralPath (Join-Path $source "tessdata") -Destination $runtime -Recurse
+          Copy-Item -LiteralPath $license -Destination (Join-Path $runtime "LICENSE-Tesseract.txt")
+
+          "LHTPDF_TESSERACT_RUNTIME=$runtime" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "Verified Tesseract runtime prepared: $runtime"
       - name: Build and package Windows x64
         shell: pwsh
         env:
-          DIST: ${{ github.workspace }}/dist/release-10.2.2
+          DIST: ${{ github.workspace }}/dist/release-2026.15.10
         run: |
           ./packaging/windows/package.ps1 -Arch x64
 
       - name: Generate SHA256SUMS
         shell: pwsh
         run: |
-          $folder = "dist/release-10.2.2"
+          $folder = "dist/release-2026.15.10"
           $names = @(
-            "lhtPDF-10.2.2-windows-x64.msi",
-            "lhtPDF-10.2.2-windows-x64-portable.zip"
+            "lhtPDF-2026.15.10-windows-x64.msi",
+            "lhtPDF-2026.15.10-windows-x64-portable.zip"
           )
           $lines = foreach ($name in $names) {
             $path = Join-Path $folder $name
@@ -72,10 +132,10 @@ jobs:
       - name: Upload verified build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: lhtPDF-10.2.2-windows-x64
+          name: lhtPDF-2026.15.10-windows-x64
           path: |
-            dist/release-10.2.2/*.msi
-            dist/release-10.2.2/*.zip
-            dist/release-10.2.2/SHA256SUMS.txt
+            dist/release-2026.15.10/*.msi
+            dist/release-2026.15.10/*.zip
+            dist/release-2026.15.10/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 30

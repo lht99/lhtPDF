@@ -131,6 +131,61 @@ pub fn register_text_font(doc: &mut Document, page: usize, bytes: &[u8]) -> Resu
     Ok(name)
 }
 
+/// Register a licensed Unicode font for an invisible OCR text layer.
+///
+/// Returns the PDF font resource and, for each supplied character, the
+/// corresponding two-byte CID and advance width at font size 1.
+pub fn register_ocr_unicode_font(
+    doc: &mut Document,
+    page: usize,
+    bytes: &[u8],
+    characters: &[char],
+) -> Result<(String, Vec<[u8; 2]>, Vec<f64>), EditError> {
+    use skrifa::{
+        FontRef, MetadataProvider,
+        instance::{LocationRef, Size},
+    };
+
+    pdfcraft_fonts::embedding::validate_document_input(bytes).map_err(EditError::Invalid)?;
+
+    let font = FontRef::new(bytes).map_err(|e| EditError::Invalid(e.to_string()))?;
+    let (_, postscript) = pdfcraft_fonts::embedding::names(bytes).map_err(EditError::Invalid)?;
+
+    let metrics = font.metrics(Size::unscaled(), LocationRef::default());
+    let scale = 1.0 / f64::from(metrics.units_per_em);
+    let advances = font.glyph_metrics(Size::unscaled(), LocationRef::default());
+
+    let mut mappings = Vec::with_capacity(characters.len());
+    let mut codes = Vec::with_capacity(characters.len());
+    let mut widths = Vec::with_capacity(characters.len());
+
+    for (index, ch) in characters.iter().enumerate() {
+        let gid = font
+            .charmap()
+            .map(*ch)
+            .filter(|gid| gid.to_u32() != 0)
+            .ok_or_else(|| EditError::Invalid(format!("OCR font does not cover U+{:04X}", *ch as u32)))?;
+
+        let cid = u16::try_from(index + 1).map_err(|_| EditError::Invalid("too many OCR glyphs".into()))?;
+
+        let width = advances.advance_width(gid).ok_or_else(|| EditError::Invalid("OCR glyph has no advance width".into()))? as f64 * scale;
+
+        mappings.push((ch.to_string(), gid));
+        codes.push(cid.to_be_bytes());
+        widths.push(width);
+    }
+
+    let p = page_dict(doc, page)?;
+    let mut resources = p.dict.get(b"Resources").and_then(|o| doc.dict(o)).unwrap_or_default();
+    let mut fonts = resources.get(b"Font").and_then(|o| doc.dict(o)).unwrap_or_default();
+
+    let resource = pdfcraft_fonts::embedding::embed_mapping(doc, &mut fonts, bytes, &postscript, &mappings).map_err(EditError::Invalid)?;
+
+    resources.set(b"Font".to_vec(), Object::Dict(fonts));
+    doc.update_dict(p.obj, |d| d.set(b"Resources".to_vec(), Object::Dict(resources)))?;
+
+    Ok((resource, codes, widths))
+}
 /// Read-only draft bounds, measured with the same PDF rewrite used by Apply/Save.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TextEditLayout {

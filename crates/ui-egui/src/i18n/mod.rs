@@ -617,31 +617,20 @@ mod tests {
         }
 
         for reference in LANGUAGES.iter().filter(|l| l.code != "vi") {
-            let (entries, errors) =
-                catalog::parse_entries(reference.source, reference.plural_forms());
+            let (entries, errors) = catalog::parse_entries(reference.source, reference.plural_forms());
 
-            assert!(
-                errors.is_empty(),
-                "{} catalog errors: {errors:?}",
-                reference.code
-            );
+            assert!(errors.is_empty(), "{} catalog errors: {errors:?}", reference.code);
 
             for entry in entries {
                 let translated = match entry.context.as_str() {
                     "" => vi.catalog().plain(&entry.source),
                     "@id" => vi.catalog().id(&entry.source),
-                    "@plural" => entry
-                        .source
-                        .split_once('|')
-                        .and_then(|(one, other)| vi.catalog().plural(one, other, 0)),
+                    "@plural" => entry.source.split_once('|').and_then(|(one, other)| vi.catalog().plural(one, other, 0)),
                     context => vi.catalog().contextual(context, &entry.source),
                 };
 
                 if translated.is_none() {
-                    missing.insert((
-                        entry.context,
-                        entry.source,
-                    ));
+                    missing.insert((entry.context, entry.source));
                 }
             }
         }
@@ -650,53 +639,30 @@ mod tests {
 
         for (kind, source) in &missing {
             let (category, context) = match kind.as_str() {
-                "command" | "menu" | "tool" | "section" | "item" | "ui" => {
-                    (kind.as_str(), "")
-                }
+                "command" | "menu" | "tool" | "section" | "item" | "ui" => (kind.as_str(), ""),
                 "@id" | "@plural" => ("catalog", kind.as_str()),
                 _ => ("catalog", kind.as_str()),
             };
 
-            let escape = |s: &str| {
-                s.replace('\\', "\\\\")
-                    .replace('\t', "\\t")
-                    .replace('\n', "\\n")
-            };
+            let escape = |s: &str| s.replace('\\', "\\\\").replace('\t', "\\t").replace('\n', "\\n");
 
-            report.push_str(&format!(
-                "{}\t{}\t{}\n",
-                escape(category),
-                escape(context),
-                escape(source)
-            ));
+            report.push_str(&format!("{}\t{}\t{}\n", escape(category), escape(context), escape(source)));
         }
 
         let path = std::env::temp_dir().join("lhtpdf-vi-missing.tsv");
 
-        std::fs::write(&path, report)
-            .expect("write Vietnamese coverage report");
+        std::fs::write(&path, report).expect("write Vietnamese coverage report");
 
-        assert!(
-            missing.is_empty(),
-            "Vietnamese translation missing {} labels; report: {}",
-            missing.len(),
-            path.display()
-        );
+        assert!(missing.is_empty(), "Vietnamese translation missing {} labels; report: {}", missing.len(), path.display());
     }
     #[test]
     fn vietnamese_catalog_is_valid() {
         let vi = Lang::from_code("vi").expect("Vietnamese is registered");
         assert_eq!(vi.name(), "Tiếng Việt");
 
-        let (_, errors) = Catalog::parse(
-            include_str!("vi.tsv"),
-            vi.0.plural_forms(),
-        );
+        let (_, errors) = Catalog::parse(include_str!("vi.tsv"), vi.0.plural_forms());
 
-        assert!(
-            errors.is_empty(),
-            "Vietnamese catalog errors: {errors:?}"
-        );
+        assert!(errors.is_empty(), "Vietnamese catalog errors: {errors:?}");
 
         assert_eq!(tr(vi, "About lhtPDF"), "Giới thiệu lhtPDF");
         assert_eq!(tr(vi, "Save"), "Lưu");
@@ -935,7 +901,8 @@ mod tests {
     #[test]
     fn missing_ocr_models_messages_are_translated() {
         let error = pdfcraft_engine::ocr::OcrError::NoModels.to_string();
-        let notice = "Text recognition isn't installed: its model files are missing. Reinstall lhtPDF, or set PDFCRAFT_MODELS to the folder that holds them.";
+        let notice =
+            "Text recognition isn't installed: its model files are missing. Reinstall lhtPDF, or set PDFCRAFT_MODELS to the folder that holds them.";
         assert!(include_str!("../ocr_ui.rs").contains(notice), "keep in step with ocr_ui.rs");
         let vi = Lang::from_code("vi").expect("Vietnamese registered");
         assert!(has(vi, notice), "Vietnamese OCR notice is missing");

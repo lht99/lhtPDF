@@ -25,7 +25,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $Root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$env:LHTPDF_VERSION = "10.2.2"
+$env:LHTPDF_VERSION = "10.3.0"
 
 function Invoke-Native([string] $What, [scriptblock] $Block) {
   Write-Output "==> $What"
@@ -34,7 +34,8 @@ function Invoke-Native([string] $What, [scriptblock] $Block) {
 }
 
 # The version lives in one place: [workspace.package] version in the root Cargo.toml.
-$Version = "10.2.2"
+$Version = "10.3.0"
+$ReleaseLabel = "2026.15.10"
 if (-not $Version) {
   $inPkg = $false
   foreach ($line in Get-Content (Join-Path $Root 'Cargo.toml')) {
@@ -95,6 +96,22 @@ foreach ($f in 'LICENSE-MIT', 'LICENSE-APACHE', 'NOTICE') {
   Copy-Item (Join-Path $Root $f) $Stage
 }
 Copy-Item (Join-Path $Root 'assets\app-icon\LICENSE-document.txt') $Stage
+# OCR fonts are embedded from the optional craft-fonts checkout, never stored in this repository.
+# The MSI expects these two licence filenames in the staging directory.
+if ($env:CRAFT_FONTS_DIR) {
+  foreach ($entry in @(
+    @('be-vietnam-pro', 'OFL-BeVietnamPro.txt'),
+    @('gowun-dodum', 'OFL-GowunDodum.txt')
+  )) {
+    $licence = Join-Path $env:CRAFT_FONTS_DIR "fonts\$($entry[0])\OFL.txt"
+    if (-not (Test-Path -LiteralPath $licence -PathType Leaf)) {
+      throw "Missing OCR font licence: $licence"
+    }
+    Copy-Item -LiteralPath $licence -Destination (Join-Path $Stage $entry[1])
+  }
+} else {
+  throw 'Windows release packaging requires CRAFT_FONTS_DIR with the OCR Unicode fonts'
+}
 
 & (Join-Path $PSScriptRoot 'sign.ps1') (Join-Path $Stage 'lhtPDF.exe') (Join-Path $Stage 'lhtPDF-cli.exe')
 
@@ -103,6 +120,22 @@ Copy-Item (Join-Path $Root 'assets\app-icon\LICENSE-document.txt') $Stage
 # the MSI and the portable zip take the whole folder, so new models ship without naming them here.
 $Models = Join-Path $Stage 'models'
 New-Item -ItemType Directory -Force -Path $Models | Out-Null
+# Reuse previously verified local OCR assets. xtask still checks each
+# model and licence against ATTRIBUTION.toml before packaging.
+$LocalModels = Join-Path $Root 'assets\models'
+if (Test-Path -LiteralPath $LocalModels -PathType Container) {
+  foreach ($f in @(
+    'text-detection.rten',
+    'text-detection.rten.LICENCE.txt',
+    'text-recognition.rten',
+    'text-recognition.rten.LICENCE.txt'
+  )) {
+    $src = Join-Path $LocalModels $f
+    if (Test-Path -LiteralPath $src -PathType Leaf) {
+      Copy-Item -LiteralPath $src -Destination $Models
+    }
+  }
+}
 Push-Location $Root
 try { Invoke-Native 'cargo xtask models' { cargo xtask models $Models } } finally { Pop-Location }
 Remove-Item -Force (Join-Path $Models '*.part') -ErrorAction SilentlyContinue
@@ -110,12 +143,30 @@ if (-not (Test-Path (Join-Path $Models 'ATTRIBUTION.txt')) -or -not (Get-ChildIt
   throw "no OCR models in $Models after cargo xtask models"
 }
 
+# Offline Tesseract OCR for English, Vietnamese and Korean.
+# Source directory is explicitly supplied for reproducible packaging.
+$TesseractSource = $env:LHTPDF_TESSERACT_RUNTIME
+if (-not $TesseractSource -or -not (Test-Path (Join-Path $TesseractSource 'tesseract.exe'))) {
+  throw "Set LHTPDF_TESSERACT_RUNTIME to a verified Tesseract runtime directory"
+}
+$TesseractDir = Join-Path $Stage 'tesseract'
+New-Item -ItemType Directory -Force -Path $TesseractDir | Out-Null
+Copy-Item (Join-Path $TesseractSource 'tesseract.exe') $TesseractDir
+Get-ChildItem -LiteralPath $TesseractSource -Filter '*.dll' -File |
+  Copy-Item -Destination $TesseractDir
+Copy-Item -Recurse (Join-Path $TesseractSource 'tessdata') $TesseractDir
+$TesseractLicense = Join-Path $TesseractSource 'LICENSE-Tesseract.txt'
+if (-not (Test-Path -LiteralPath $TesseractLicense -PathType Leaf)) {
+  throw "Missing Tesseract license in LHTPDF_TESSERACT_RUNTIME"
+}
+Copy-Item -LiteralPath $TesseractLicense `
+  -Destination (Join-Path $TesseractDir 'LICENSE-Tesseract.txt')
 # ---- MSI ---------------------------------------------------------------------------------------
-$Msi = Join-Path $Dist "lhtPDF-$Version-windows-$Arch.msi"
+$Msi = Join-Path $Dist "lhtPDF-$ReleaseLabel-windows-$Arch.msi"
 Invoke-Native 'wix build' {
   wix build (Join-Path $PSScriptRoot 'pdfcraft.wxs') -arch $Arch `
     (Join-Path $PSScriptRoot 'installer-ui.wxs') `
-    -d "Version=$MsiVersion" -d "BinDir=$Stage" -d "ModelsDir=$Models" -d "IconPath=$(Join-Path $Root 'assets\app-icon\pdfcraft.ico')" `
+    -d "Version=$MsiVersion" -d "BinDir=$Stage" -d "ModelsDir=$Models" -d "TesseractDir=$TesseractDir" -d "IconPath=$(Join-Path $Root 'assets\app-icon\pdfcraft.ico')" `
     -o $Msi
 }
 # Inspect the built MSI, not just the XML, before signing/publishing it. In a child process, so
@@ -126,14 +177,15 @@ Remove-Item -Force -ErrorAction SilentlyContinue ([IO.Path]::ChangeExtension($Ms
 & (Join-Path $PSScriptRoot 'sign.ps1') $Msi
 
 # ---- portable zip ------------------------------------------------------------------------------
-$Portable = Join-Path $TargetDir "windows-package\lhtPDF-$Version-windows-$Arch-portable"
+$Portable = Join-Path $TargetDir "windows-package\lhtPDF-$ReleaseLabel-windows-$Arch-portable"
 Remove-Item -Recurse -Force $Portable -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $Portable | Out-Null
 Copy-Item (Join-Path $Stage '*.exe') $Portable
-foreach ($f in 'NOTICE', 'LICENSE-document.txt') {
+foreach ($f in 'NOTICE', 'LICENSE-document.txt', 'OFL-BeVietnamPro.txt', 'OFL-GowunDodum.txt') {
   Copy-Item (Join-Path $Stage $f) $Portable
 }
 Copy-Item -Recurse $Models (Join-Path $Portable 'models')
+Copy-Item -Recurse $TesseractDir (Join-Path $Portable 'tesseract')
 foreach ($f in 'README.md', 'LICENSE', 'LICENSE-MIT', 'LICENSE-APACHE') {
   $p = Join-Path $Root $f
   if (Test-Path $p) { Copy-Item $p $Portable }
@@ -150,7 +202,7 @@ if ($env:CRAFT_FONTS_DIR) {
 # digital IDs go to PdfCraftData\ next to the exe instead of %APPDATA% (#157; see
 # crates/ui-egui/src/portable.rs).
 Copy-Item (Join-Path $PSScriptRoot 'portable.txt') $Portable
-$Zip = Join-Path $Dist "lhtPDF-$Version-windows-$Arch-portable.zip"
+$Zip = Join-Path $Dist "lhtPDF-$ReleaseLabel-windows-$Arch-portable.zip"
 Remove-Item -Force $Zip -ErrorAction SilentlyContinue
 Compress-Archive -Path $Portable -DestinationPath $Zip
 

@@ -165,10 +165,7 @@ mod tests {
         let p = resolve(Some(&exe));
 
         assert_eq!(p.dir, Some(legacy.clone()));
-        assert_eq!(
-            std::fs::read(legacy.join("app.ron")).unwrap(),
-            b"legacy-settings"
-        );
+        assert_eq!(std::fs::read(legacy.join("app.ron")).unwrap(), b"legacy-settings");
         assert!(!exe.join(DATA_DIR).exists());
 
         let _ = std::fs::remove_dir_all(&exe);
@@ -189,14 +186,8 @@ mod tests {
         std::fs::write(legacy.join("app.ron"), b"old-settings").unwrap();
 
         assert_eq!(resolve(Some(&exe)).dir, Some(preferred.clone()));
-        assert_eq!(
-            std::fs::read(preferred.join("app.ron")).unwrap(),
-            b"new-settings"
-        );
-        assert_eq!(
-            std::fs::read(legacy.join("app.ron")).unwrap(),
-            b"old-settings"
-        );
+        assert_eq!(std::fs::read(preferred.join("app.ron")).unwrap(), b"new-settings");
+        assert_eq!(std::fs::read(legacy.join("app.ron")).unwrap(), b"old-settings");
 
         let _ = std::fs::remove_dir_all(&exe);
     }

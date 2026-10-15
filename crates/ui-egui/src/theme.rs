@@ -695,72 +695,38 @@ mod tests {
         }
     }
 
-
     #[test]
     fn korean_filename_has_glyphs_in_all_ui_families() {
         if !cfg!(windows) {
             return;
         }
 
-        let mut fonts = Fonts::new(
-            TextOptions::default(),
-            installed_font_definitions(CjkPreference::Default),
-        );
+        let mut fonts = Fonts::new(TextOptions::default(), installed_font_definitions(CjkPreference::Default));
 
         let filename = "\u{C548}\u{B155}\u{D558}\u{C138}\u{C694}_\u{D55C}\u{AE00}_\u{BB38}\u{C11C}.pdf";
 
-        for family in [
-            FontFamily::Proportional,
-            FontFamily::Monospace,
-            FontFamily::Name("medium".into()),
-            FontFamily::Name("semibold".into()),
-        ] {
+        for family in [FontFamily::Proportional, FontFamily::Monospace, FontFamily::Name("medium".into()), FontFamily::Name("semibold".into())] {
             let id = FontId::new(16.0, family.clone());
 
-            assert!(
-                fonts.has_glyphs(&id, filename),
-                "Missing Korean filename glyphs in {family:?}"
-            );
+            assert!(fonts.has_glyphs(&id, filename), "Missing Korean filename glyphs in {family:?}");
         }
     }
     #[test]
     fn korean_fallback_preserves_cjk_priority() {
-        for preference in [
-            CjkPreference::Default,
-            CjkPreference::SimplifiedChinese,
-            CjkPreference::TraditionalChinese,
-        ] {
+        for preference in [CjkPreference::Default, CjkPreference::SimplifiedChinese, CjkPreference::TraditionalChinese] {
             let fonts = installed_font_definitions(preference);
 
-            for family in [
-                FontFamily::Proportional,
-                FontFamily::Monospace,
-                FontFamily::Name("medium".into()),
-                FontFamily::Name("semibold".into()),
-            ] {
+            for family in [FontFamily::Proportional, FontFamily::Monospace, FontFamily::Name("medium".into()), FontFamily::Name("semibold".into())] {
                 let stack = &fonts.families[&family];
 
-                let Some(korean_pos) = stack
-                    .iter()
-                    .position(|name| name == SYSTEM_KOREAN_FALLBACK)
-                else {
+                let Some(korean_pos) = stack.iter().position(|name| name == SYSTEM_KOREAN_FALLBACK) else {
                     continue;
                 };
 
-                assert_eq!(
-                    korean_pos,
-                    stack.len() - 1,
-                    "Korean fallback must be last: {family:?}"
-                );
+                assert_eq!(korean_pos, stack.len() - 1, "Korean fallback must be last: {family:?}");
 
-                if let Some(chinese_pos) = stack
-                    .iter()
-                    .position(|name| name == SYSTEM_FALLBACK)
-                {
-                    assert!(
-                        chinese_pos < korean_pos,
-                        "Chinese/system fallback must precede Korean"
-                    );
+                if let Some(chinese_pos) = stack.iter().position(|name| name == SYSTEM_FALLBACK) {
+                    assert!(chinese_pos < korean_pos, "Chinese/system fallback must precede Korean");
                 }
             }
         }

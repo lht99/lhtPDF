@@ -67,9 +67,7 @@ impl PdfCraftApp {
     pub fn check_for_updates(&mut self) {
         if option_env!("LHTPDF_VERSION").is_some() {
             self.updates.open = true;
-            self.updates.check = Check::Done(Err(
-                "lhtPDF updates are not configured yet.".into()
-            ));
+            self.updates.check = Check::Done(Err("lhtPDF updates are not configured yet.".into()));
             return;
         }
 
@@ -160,10 +158,7 @@ pub(crate) fn dialog(app: &mut PdfCraftApp, ctx: &egui::Context) {
             Check::Done(Err(e)) => {
                 if option_env!("LHTPDF_VERSION").is_some() {
                     ui.label("Automatic update checking is not configured yet.");
-                    ui.hyperlink_to(
-                        "Website & Support: https://letuan.io.vn",
-                        "https://letuan.io.vn",
-                    );
+                    ui.hyperlink_to("Website & Support: https://letuan.io.vn", "https://letuan.io.vn");
                 } else {
                     ui.label(crate::i18n::fmt(tl!("Couldn't check for updates: {e}"), &[("e", &e.to_string())]));
                     ui.label(
@@ -178,11 +173,7 @@ pub(crate) fn dialog(app: &mut PdfCraftApp, ctx: &egui::Context) {
         }
         ui.add_space(10.0);
         if option_env!("LHTPDF_VERSION").is_some() {
-            ui.label(
-                egui::RichText::new("lhtPDF does not download or install updates automatically.")
-                    .color(t.text_muted)
-                    .small(),
-            );
+            ui.label(egui::RichText::new("lhtPDF does not download or install updates automatically.").color(t.text_muted).small());
         } else {
             ui.label(
                 egui::RichText::new(tl!("Asks GitHub for the latest release. Nothing is downloaded or installed automatically."))

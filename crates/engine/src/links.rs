@@ -519,9 +519,10 @@ mod tests {
     }
 
     #[test]
-    fn urls_follow_the_artcraft_scheme() {
-        assert_eq!(super::APP_PAGE, format!("{}/apps/{}", super::WEBSITE, super::APP));
-        assert_eq!(super::GITHUB, format!("https://github.com/storytold/{}", super::APP));
+    fn urls_follow_the_lhtpdf_branding() {
+        assert_eq!(super::WEBSITE, "https://letuan.io.vn");
+        assert_eq!(super::APP_PAGE, super::WEBSITE);
+        assert_eq!(super::GITHUB, "https://github.com/storytold/pdfcraft");
         for l in super::LINKS {
             assert!(l.url.starts_with("https://"), "{}", l.url);
             assert!(crate::commands::command(l.command).is_some(), "{} is a registered command", l.command);

@@ -34,7 +34,7 @@ pub struct OcrDraft {
 
 impl Default for OcrDraft {
     fn default() -> Self {
-        OcrDraft { pages: OcrPages::All, from: 1, to: 1, language: "en".into(), dpi: 300, text_pages: false }
+        OcrDraft { pages: OcrPages::All, from: 1, to: 1, language: "en".into(), dpi: 300, text_pages: true }
     }
 }
 
@@ -69,7 +69,7 @@ pub struct OcrRun {
 
 pub(crate) fn body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> (bool, bool) {
     let pages = app.active_ids().and_then(|(_, id)| app.session.get(id)).map_or(1, |d| d.info.pages.len().max(1));
-    let available = pdfcraft_engine::ocr::available();
+    let available = pdfcraft_engine::ocr::available_for(&app.ocr_draft.language);
     let d = &mut app.ocr_draft;
     d.to = d.to.clamp(1, pages);
     d.from = d.from.clamp(1, d.to);
@@ -169,8 +169,8 @@ impl PdfCraftApp {
         let progress = Arc::new(Mutex::new(OcrProgress { total: job.pages.len(), ..Default::default() }));
         let p = progress.clone();
         let work = move || {
-            let result = pdfcraft_engine::ocr::engine().map(|ocr| {
-                job.run(&ocr, |done, total| {
+            let result = (if job.settings.language == "en" { pdfcraft_engine::ocr::engine().map(Some) } else { Ok(None) }).map(|ocr| {
+                job.run_with_optional_ocr(ocr.as_deref(), |done, total| {
                     let Ok(mut s) = p.lock() else { return false };
                     s.done = done;
                     s.total = total;
@@ -228,14 +228,14 @@ impl PdfCraftApp {
         let work = move || {
             crate::i18n::set_current(lang);
             let (mut ok, mut words, mut failed) = (0, 0, Vec::new());
-            match pdfcraft_engine::ocr::engine() {
+            match if settings.language == "en" { pdfcraft_engine::ocr::engine().map(|_| ()) } else { Ok(()) } {
                 Err(e) => failed.push(e),
-                Ok(ocr) => {
+                Ok(()) => {
                     for (i, (name, bytes)) in files.into_iter().enumerate() {
                         if let Ok(mut s) = p.lock() {
                             s.done = i;
                         }
-                        let r = pdfcraft_engine::ocr::recognize_file(&name, Arc::new(bytes), None, settings.clone(), &ocr, |_, _| true);
+                        let r = pdfcraft_engine::ocr::recognize_file_auto(&name, Arc::new(bytes), None, settings.clone(), |_, _| true);
                         let saved = r.and_then(|r| {
                             #[cfg(not(target_arch = "wasm32"))]
                             crate::editing::write_atomically(&dir.join(&name).to_string_lossy(), &r.bytes).map_err(|e| e.to_string())?;

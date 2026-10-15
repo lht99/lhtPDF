@@ -13,6 +13,7 @@ pdfcraft-annot = { workspace = true }
 pdfcraft-cos = { workspace = true }
 pdfcraft-content = { workspace = true }
 pdfcraft-fonts = { workspace = true }
+skrifa = "0.44.0"
 pdfcraft-model = { workspace = true }
 thiserror = { workspace = true }
 kurbo = { workspace = true }
