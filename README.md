@@ -14,7 +14,6 @@
 
 ![Latest Downloads](https://img.shields.io/github/downloads/lht99/lhtPDF/latest/total?label=Latest%20Downloads)
 
-[Download Latest Release](https://github.com/lht99/lhtPDF/releases/latest)
 [![MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE-MIT)
 [![Apache](https://img.shields.io/badge/License-Apache_2.0-green)](LICENSE-APACHE)
 
