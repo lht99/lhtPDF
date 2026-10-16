@@ -70,9 +70,21 @@ Chỉ tải phần mềm từ kho GitHub chính thức hoặc website dự án. 
 ## Lịch sử phát hành
 
 <!-- LHTPDF_RELEASE_HISTORY_START -->
+### [2026.15.10](https://github.com/lht99/lhtPDF/releases/tag/2026.15.10) — 2026-10-15 (Stable)
 
-Thông tin các phiên bản gần nhất sẽ được GitHub Actions cập nhật tự động sau khi phát hành.
+- lhtPDF là phần mềm xử lý tài liệu PDF, phát triển từ dự án mã nguồn mở PdfCraft.
+- Phiên bản dành cho Windows 64-bit, gồm bộ cài MSI và bản Portable.
+- MSI: Phù hợp để cài đặt trên máy tính.
+- [Tải MSI](https://github.com/lht99/lhtPDF/releases/download/2026.15.10/lhtPDF-2026.15.10-windows-x64.msi)
+- [Tải Portable ZIP](https://github.com/lht99/lhtPDF/releases/download/2026.15.10/lhtPDF-2026.15.10-windows-x64-portable.zip)
 
+### [v10.2.2](https://github.com/lht99/lhtPDF/releases/tag/v10.2.2) — 2026-10-14 (Pre-release)
+
+- lhtPDF 10.2.2 - Windows x64
+- First lhtPDF release based on the open-source PdfCraft project.
+- lhtPDF application branding and icons.
+- [Tải MSI](https://github.com/lht99/lhtPDF/releases/download/v10.2.2/lhtPDF-10.2.2-windows-x64.msi)
+- [Tải Portable ZIP](https://github.com/lht99/lhtPDF/releases/download/v10.2.2/lhtPDF-10.2.2-windows-x64-portable.zip)
 <!-- LHTPDF_RELEASE_HISTORY_END -->
 
 ## Hướng dẫn sử dụng
