@@ -5,6 +5,7 @@
 //! Everything here is presentation: documents, rendering and the tool catalogue live in
 //! `pdfcraft-engine`.
 
+#![recursion_limit = "256"]
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
 /// Translate an English UI string into the current language (see [`i18n`]).
@@ -542,6 +543,12 @@ pub struct PdfCraftApp {
     /// How to ask for the latest release (the desktop app sets it; see `updates`).
     pub update_source: Option<updates::UpdateSource>,
     pub(crate) updates: updates::Updates,
+    /// Check GitHub Latest at startup unless disabled.
+    pub check_updates_at_start: bool,
+    /// Latest release tag already shown automatically.
+    pub last_notified_update: Option<String>,
+    /// Local date (YYYY-MM-DD) on which startup notices are suppressed.
+    pub update_snooze_until: Option<String>,
     /// Lists the Print dialog's printers in the background (the desktop app sets it; see
     /// [`PrinterSource`]).
     pub printer_source: Option<PrinterSource>,
@@ -902,6 +909,9 @@ impl PdfCraftApp {
             dialog: None,
             update_source: None,
             updates: updates::Updates::default(),
+            check_updates_at_start: true,
+            last_notified_update: None,
+            update_snooze_until: None,
             printer_source: None,
             print_tasks: print_ui::PrintTasks::default(),
             palette_open: false,
@@ -2109,6 +2119,9 @@ impl PdfCraftApp {
             // Kept only while the preference is on.
             "last_session": self.reopen_last_session.then(|| self.session_to_save()),
             "reload_changed_files": self.reload_changed_files,
+            "check_updates_at_start": self.check_updates_at_start,
+            "last_notified_update": self.last_notified_update,
+            "update_snooze_until": self.update_snooze_until,
             "system_title_bar": self.system_title_bar,
             "pinned_folders": self.pinned.folders,
             "theme": self.theme_preference,
@@ -2192,6 +2205,14 @@ impl PdfCraftApp {
             self.reopen_last_session = on;
         }
         self.last_session = last_session::LastSession::from_json(&v["last_session"]);
+        if let Some(enabled) = v["check_updates_at_start"].as_bool() {
+            self.check_updates_at_start = enabled;
+        }
+        self.last_notified_update = v["last_notified_update"].as_str().filter(|tag| tag.len() <= 64).map(str::to_owned);
+        self.update_snooze_until = v["update_snooze_until"]
+            .as_str()
+            .filter(|date| date.len() == 10 && date.bytes().enumerate().all(|(i, b)| if i == 4 || i == 7 { b == b'-' } else { b.is_ascii_digit() }))
+            .map(str::to_owned);
         if let Some(on) = v["system_title_bar"].as_bool() {
             self.system_title_bar = on;
         }
@@ -2891,6 +2912,7 @@ impl eframe::App for PdfCraftApp {
                 report(dirty);
             }
         }
+        self.check_updates_on_startup();
         self.poll_updates();
         self.poll_print();
         // Shortcuts deferred last frame: the text field has taken that frame's typing since.
@@ -2995,6 +3017,7 @@ impl eframe::App for PdfCraftApp {
         if self.draws_window_frame() {
             window_controls::resize_edges(&ctx);
         }
+        chrome::main_menu_bar(self, ui);
         chrome::tab_strip(self, ui);
         chrome::mode_bar(self, ui);
         if self.active.is_some() {

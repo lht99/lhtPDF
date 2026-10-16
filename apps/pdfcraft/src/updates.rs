@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use pdfcraft_ui_egui::updates::{RELEASES_PAGE, Release};
 
-const LATEST: &str = "https://api.github.com/repos/storytold/pdfcraft/releases/latest";
+const LATEST: &str = "https://api.github.com/repos/lht99/lhtPDF/releases/latest";
 
 /// The latest release. The answer is untrusted: its size is capped, and only a page under
 /// [`RELEASES_PAGE`] is ever offered for download (anything else falls back to that list).
@@ -17,7 +17,7 @@ pub fn latest_release() -> Result<Release, String> {
     let mut response = agent
         .get(LATEST)
         .header("Accept", "application/vnd.github+json")
-        .header("User-Agent", concat!("PdfCraft/", env!("CARGO_PKG_VERSION")))
+        .header("User-Agent", concat!("lhtPDF/", env!("CARGO_PKG_VERSION")))
         // Read error statuses ourselves: a 403 from GitHub usually means its anonymous
         // rate limit ran out, and the retry time rides along in a response header.
         .config()
@@ -77,7 +77,25 @@ fn parse(body: &str) -> Result<Release, String> {
         .filter(|u| u.strip_prefix(RELEASES_PAGE).is_some_and(|rest| rest.starts_with('/') && !rest.contains(['?', '#', '\\'])))
         .unwrap_or(RELEASES_PAGE)
         .to_string();
-    Ok(Release { version, url })
+    let msi_url = v["assets"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|asset| {
+            let name = asset["name"].as_str()?;
+            if !name.to_ascii_lowercase().ends_with(".msi") || name.contains(['/', '\\', '?', '#']) {
+                return None;
+            }
+            let download = asset["browser_download_url"].as_str()?;
+            let prefix = format!("https://github.com/lht99/lhtPDF/releases/download/{version}/");
+            let filename = download.strip_prefix(&prefix)?;
+            if filename != name || filename.contains("..") || version.contains(['/', '\\', '?', '#']) {
+                return None;
+            }
+            Some(download.to_string())
+        })
+        .next();
+    Ok(Release { version, url, msi_url })
 }
 
 #[cfg(test)]
@@ -86,12 +104,30 @@ mod tests {
 
     #[test]
     fn answers_are_read_and_only_our_release_pages_are_offered() {
-        let r = parse(r#"{"tag_name":"v0.2.0","html_url":"https://github.com/storytold/pdfcraft/releases/tag/v0.2.0"}"#).unwrap();
-        assert_eq!(r, Release { version: "v0.2.0".into(), url: "https://github.com/storytold/pdfcraft/releases/tag/v0.2.0".into() });
+        let r = parse(r#"{"tag_name":"v0.2.0","html_url":"https://github.com/lht99/lhtPDF/releases/tag/v0.2.0"}"#).unwrap();
+        assert_eq!(r, Release { version: "v0.2.0".into(), url: "https://github.com/lht99/lhtPDF/releases/tag/v0.2.0".into(), msi_url: None });
         for elsewhere in ["https://example.com/pdfcraft.exe", "https://github.com/storytold/pdfcraft/releases.evil/x", "javascript:alert(1)"] {
             let r = parse(&format!(r#"{{"tag_name":"v9.9.9","html_url":"{elsewhere}"}}"#)).unwrap();
             assert_eq!(r.url, RELEASES_PAGE, "{elsewhere}");
         }
+        let with_msi = parse(
+            r#"{"tag_name":"v26.10.17","html_url":"https://github.com/lht99/lhtPDF/releases/tag/v26.10.17","assets":[{"name":"lhtPDF-26.10.17-windows-x64.msi","browser_download_url":"https://github.com/lht99/lhtPDF/releases/download/v26.10.17/lhtPDF-26.10.17-windows-x64.msi"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(with_msi.msi_url.as_deref(), Some("https://github.com/lht99/lhtPDF/releases/download/v26.10.17/lhtPDF-26.10.17-windows-x64.msi"));
+
+        let wrong_tag = parse(
+            r#"{"tag_name":"v26.10.17","assets":[{"name":"lhtPDF-26.10.17-windows-x64.msi","browser_download_url":"https://github.com/lht99/lhtPDF/releases/download/v26.10.16/lhtPDF-26.10.17-windows-x64.msi"}]}"#,
+        )
+        .unwrap();
+        assert!(wrong_tag.msi_url.is_none());
+
+        let wrong_filename = parse(
+            r#"{"tag_name":"v26.10.17","assets":[{"name":"installer.msi","browser_download_url":"https://github.com/lht99/lhtPDF/releases/download/v26.10.17/other.msi"}]}"#,
+        )
+        .unwrap();
+        assert!(wrong_filename.msi_url.is_none());
+
         assert!(parse(r#"{"message":"Not Found"}"#).is_err());
         assert!(parse("<html>").is_err());
     }

@@ -39,7 +39,6 @@ mod motion;
 mod reopen;
 mod single_instance;
 mod text_scale;
-#[cfg(test)]
 mod updates;
 #[cfg(test)]
 #[path = "windows_manifest.rs"]
@@ -438,9 +437,9 @@ fn app_creator<'a>(
         {
             app.motion.source = Some(motion::source());
         }
-        // lhtPDF has no independent release feed yet.
-        // Do not query the original PdfCraft release API.
-        app.update_source = None;
+        // Check the lhtPDF GitHub Latest release only when requested.
+        // Downloads and installation remain manual.
+        app.update_source = Some(std::sync::Arc::new(updates::latest_release));
         app.printer_source = Some(pdfcraft_ui_egui::system_printers());
         app.os_key_store_ids = cfg!(any(target_os = "macos", target_os = "windows"));
         #[cfg(target_os = "macos")]

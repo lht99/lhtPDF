@@ -216,6 +216,10 @@ pub struct Find {
     pub matches: Vec<(usize, Range<usize>)>,
     pub current: Option<usize>,
     pub focus: bool,
+    /// Whether the floating Ctrl+F search bar is visible.
+    pub popup_visible: bool,
+    /// Whether the inline search field beside the page number is visible.
+    pub toolbar_visible: bool,
     pub case_query: String,
     /// Find options (Acrobat's: case-sensitive, whole words only).
     pub case_sensitive: bool,
@@ -898,6 +902,8 @@ impl DocView {
     /// Open the find bar (or focus it if already open).
     pub fn open_find(&mut self) {
         let f = self.find.get_or_insert_with(Find::default);
+        f.toolbar_visible = false;
+        f.popup_visible = true;
         f.focus = true;
     }
 
@@ -3609,6 +3615,9 @@ fn set_layers(app: &mut PdfCraftApp, index: usize, changes: &[(LayerOp, (u32, u1
 /// Acrobat-style floating find bar at the top-right of the document area.
 fn find_bar(view: &mut DocView, pages: usize, area: Rect, ui: &mut egui::Ui, t: &Tokens) {
     let Some(find) = view.find.as_mut() else { return };
+    if !find.popup_visible {
+        return;
+    }
     // The Search panel shows this search.
     if find.in_panel {
         return;
@@ -3691,7 +3700,10 @@ fn find_bar(view: &mut DocView, pages: usize, area: Rect, ui: &mut egui::Ui, t: 
                 });
         });
     if close {
-        view.find = None;
+        if let Some(find) = view.find.as_mut() {
+            find.popup_visible = false;
+            find.focus = false;
+        }
         return;
     }
     if find.query != find.case_query {
