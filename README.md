@@ -67,6 +67,14 @@ Bản phát hành hiện được đánh dấu **release**.
 
 Chỉ tải phần mềm từ kho GitHub chính thức hoặc website dự án. Nên kiểm tra mã SHA-256 trước khi sử dụng.
 
+## Lịch sử phát hành
+
+<!-- LHTPDF_RELEASE_HISTORY_START -->
+
+Thông tin các phiên bản gần nhất sẽ được GitHub Actions cập nhật tự động sau khi phát hành.
+
+<!-- LHTPDF_RELEASE_HISTORY_END -->
+
 ## Hướng dẫn sử dụng
 
 **Bản cài đặt MSI:** Tải tệp MSI, mở tệp và làm theo hướng dẫn cài đặt.
