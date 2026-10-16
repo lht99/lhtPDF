@@ -268,9 +268,7 @@ pub(crate) fn preferences_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tok
         let before = app.language.clone();
         let selected = crate::i18n::Lang::from_code(&app.language).map_or(tl!("Auto"), crate::i18n::Lang::name);
 
-        let response = ui.button(format!("{selected}  ▾"));
-        egui::Popup::menu(&response).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
-            ui.set_min_width(response.rect.width());
+        egui::ComboBox::from_id_salt("preferences-interface-language").selected_text(selected).show_ui(ui, |ui| {
             for language in crate::i18n::Lang::all() {
                 if matches!(language.code(), "en" | "vi") && ui.selectable_label(app.language == language.code(), language.name()).clicked() {
                     app.language = language.code().to_string();
