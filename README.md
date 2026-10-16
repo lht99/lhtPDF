@@ -8,12 +8,12 @@
 
 **Ứng dụng đọc, chỉnh sửa và xử lý tài liệu PDF dành cho Windows, hỗ trợ tiếng Việt.**
 
-[![Phiên bản](https://img.shields.io/badge/Version-10.2.2-blue)](https://github.com/lht99/lhtPDF/releases/tag/v10.2.2)
-[![Windows](https://img.shields.io/badge/Windows-x64-0078D4)](https://github.com/lht99/lhtPDF/releases)
+![Phiên bản](https://img.shields.io/github/v/release/lht99/lhtPDF?label=Version)
+![Total Downloads1](https://img.shields.io/github/downloads/lht99/lhtPDF/total?label=Total%20Downloads)
 [![MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE-MIT)
 [![Apache](https://img.shields.io/badge/License-Apache_2.0-green)](LICENSE-APACHE)
 
-**[TẢI LHTPDF](https://github.com/lht99/lhtPDF/releases/tag/v10.2.2)** |
+**[TẢI LHTPDF](https://github.com/lht99/lhtPDF/releases/latest)** |
 **[TRANG CHỦ](https://letuan.io.vn)** |
 **[GÓP Ý / BÁO LỖI](https://github.com/lht99/lhtPDF/issues)**
 
@@ -51,21 +51,41 @@ Một số chức năng phụ thuộc vào phiên bản ứng dụng và các th
 
 ## Tải xuống
 
-**Phiên bản hiện tại: lhtPDF 10.2.2 — Windows x64**
+**Phiên bản hiện tại: lhtPDF 2026.15.10 — Windows x64**
 
-Bản phát hành hiện được đánh dấu **Pre-release**.
+Bản phát hành hiện được đánh dấu **release**.
 
 | Tệp | Mô tả |
 | --- | --- |
-| [Bộ cài đặt MSI](https://github.com/lht99/lhtPDF/releases/download/v10.2.2/lhtPDF-10.2.2-windows-x64.msi) | Cài đặt lhtPDF trên Windows |
-| [Bản Portable ZIP](https://github.com/lht99/lhtPDF/releases/download/v10.2.2/lhtPDF-10.2.2-windows-x64-portable.zip) | Giải nén và chạy ứng dụng |
-| [SHA256SUMS.txt](https://github.com/lht99/lhtPDF/releases/download/v10.2.2/SHA256SUMS.txt) | Kiểm tra mã SHA-256 |
+| [Bộ cài đặt MSI](https://github.com/lht99/lhtPDF/releases/download/2026.15.10/lhtPDF-2026.15.10-windows-x64.msi) | Cài đặt lhtPDF trên Windows |
+| [Bản Portable ZIP](https://github.com/lht99/lhtPDF/releases/download/2026.15.10/lhtPDF-2026.15.10-windows-x64-portable.zip) | Giải nén và chạy ứng dụng |
+| [SHA256SUMS.txt](https://github.com/lht99/lhtPDF/releases/download/2026.15.10/SHA256SUMS.txt) | Kiểm tra mã SHA-256 |
 
 ### Lưu ý Windows SmartScreen
 
 Ứng dụng có thể chưa được ký số bằng chứng thư được Windows tin cậy, vì vậy Windows SmartScreen có thể hiển thị cảnh báo.
 
 Chỉ tải phần mềm từ kho GitHub chính thức hoặc website dự án. Nên kiểm tra mã SHA-256 trước khi sử dụng.
+
+## Lịch sử phát hành
+
+<!-- LHTPDF_RELEASE_HISTORY_START -->
+### [2026.15.10](https://github.com/lht99/lhtPDF/releases/tag/2026.15.10) — 2026-10-15 (Stable)
+
+- lhtPDF là phần mềm xử lý tài liệu PDF, phát triển từ dự án mã nguồn mở PdfCraft.
+- Phiên bản dành cho Windows 64-bit, gồm bộ cài MSI và bản Portable.
+- MSI: Phù hợp để cài đặt trên máy tính.
+- [Tải MSI](https://github.com/lht99/lhtPDF/releases/download/2026.15.10/lhtPDF-2026.15.10-windows-x64.msi)
+- [Tải Portable ZIP](https://github.com/lht99/lhtPDF/releases/download/2026.15.10/lhtPDF-2026.15.10-windows-x64-portable.zip)
+
+### [v10.2.2](https://github.com/lht99/lhtPDF/releases/tag/v10.2.2) — 2026-10-14 (Pre-release)
+
+- lhtPDF 10.2.2 - Windows x64
+- First lhtPDF release based on the open-source PdfCraft project.
+- lhtPDF application branding and icons.
+- [Tải MSI](https://github.com/lht99/lhtPDF/releases/download/v10.2.2/lhtPDF-10.2.2-windows-x64.msi)
+- [Tải Portable ZIP](https://github.com/lht99/lhtPDF/releases/download/v10.2.2/lhtPDF-10.2.2-windows-x64-portable.zip)
+<!-- LHTPDF_RELEASE_HISTORY_END -->
 
 ## Hướng dẫn sử dụng
 

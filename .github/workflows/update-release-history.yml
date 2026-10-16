@@ -1,0 +1,71 @@
+name: Update lhtPDF Release History
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: lhtpdf-release-history
+  cancel-in-progress: false
+
+jobs:
+  update-readme:
+    runs-on: windows-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout default branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: true
+
+      - name: Update release history
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./scripts/update-release-history.ps1 `
+            -Repository "${{ github.repository }}" `
+            -ReadmePath "README.md" `
+            -MaxReleases 5
+
+      - name: Validate README
+        shell: pwsh
+        run: |
+          git diff --check -- README.md
+          if ($LASTEXITCODE -ne 0) {
+            throw "README validation failed."
+          }
+
+      - name: Commit README only if changed
+        shell: pwsh
+        run: |
+          git add -- README.md
+
+          git diff --cached --quiet -- README.md
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "README already up to date."
+            exit 0
+          }
+
+          if ($LASTEXITCODE -ne 1) {
+            throw "Cannot inspect staged README changes."
+          }
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git commit -m "docs: update lhtPDF release history"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Git commit failed."
+          }
+
+          git push origin "HEAD:${{ github.event.repository.default_branch }}"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Git push failed."
+          }
