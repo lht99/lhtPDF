@@ -57,7 +57,7 @@ Bản phát hành hiện được đánh dấu **release**.
 
 | Tệp | Mô tả |
 | --- | --- |
-| [Bộ cài đặt MSI](https://img.shields.io/github/v/release/lht99/lhtPDF?label=Download&color=blue)](https://github.com/lht99/lhtPDF/releases/latest) | Cài đặt lhtPDF trên Windows |
+| [Download](https://img.shields.io/github/v/release/lht99/lhtPDF?label=Download&color=blue)](https://github.com/lht99/lhtPDF/releases/latest) | Cài đặt lhtPDF trên Windows |
 | [Bản Portable ZIP](https://github.com/lht99/lhtPDF/releases/download/26.10.16/lhtPDF-26.10.16-windows-x64-portable.zip) | Giải nén và chạy ứng dụng |
 
 ### Lưu ý Windows SmartScreen
