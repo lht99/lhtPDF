@@ -32,7 +32,7 @@ jobs:
           ./scripts/update-release-history.ps1 `
             -Repository "${{ github.repository }}" `
             -ReadmePath "README.md" `
-            -MaxReleases 5
+            -MaxReleases 3
 
       - name: Validate README
         shell: pwsh
