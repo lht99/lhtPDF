@@ -51,7 +51,7 @@ Một số chức năng phụ thuộc vào phiên bản ứng dụng và các th
 
 ## Tải xuống
 
-**Phiên bản hiện tại: lhtPDF 2026.15.10 — Windows x64**
+**Phiên bản hiện tại: lhtPDF ![Phiên bản](https://img.shields.io/github/v/release/lht99/lhtPDF?label=Version) — Windows x64**
 
 Bản phát hành hiện được đánh dấu **release**.
 
