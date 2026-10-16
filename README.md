@@ -59,7 +59,6 @@ Bản phát hành hiện được đánh dấu **release**.
 | --- | --- |
 | [Bộ cài đặt MSI](https://github.com/lht99/lhtPDF/releases/download/26.10.16/lhtPDF-26.10.16-windows-x64.msi) | Cài đặt lhtPDF trên Windows |
 | [Bản Portable ZIP](https://github.com/lht99/lhtPDF/releases/download/26.10.16/lhtPDF-26.10.16-windows-x64-portable.zip) | Giải nén và chạy ứng dụng |
-| [SHA256SUMS.txt](https://github.com/lht99/lhtPDF/releases/download/2026.15.10/SHA256SUMS.txt) | Kiểm tra mã SHA-256 |
 
 ### Lưu ý Windows SmartScreen
 
