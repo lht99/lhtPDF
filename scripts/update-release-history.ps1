@@ -1,4 +1,5 @@
-﻿param(
+﻿
+param(
     [string]$Repository = "lht99/lhtPDF",
     [string]$ReadmePath = "README.md",
     [int]$MaxReleases = 3
@@ -14,28 +15,48 @@ if ($MaxReleases -lt 1 -or $MaxReleases -gt 20) {
     throw "MaxReleases must be between 1 and 20."
 }
 
+$path = (Resolve-Path -LiteralPath $ReadmePath).Path
 $utf8 = New-Object System.Text.UTF8Encoding($false, $true)
 $original = $utf8.GetString(
-    [System.IO.File]::ReadAllBytes(
-        (Resolve-Path -LiteralPath $ReadmePath).Path
-    )
+    [System.IO.File]::ReadAllBytes($path)
 )
 
-$start = "<!-- LHTPDF_RELEASE_HISTORY_START -->"
-$end = "<!-- LHTPDF_RELEASE_HISTORY_END -->"
+$historyStart = "<!-- LHTPDF_RELEASE_HISTORY_START -->"
+$historyEnd = "<!-- LHTPDF_RELEASE_HISTORY_END -->"
 
-if (
-    ([regex]::Matches($original, [regex]::Escape($start))).Count -ne 1 -or
-    ([regex]::Matches($original, [regex]::Escape($end))).Count -ne 1
-) {
-    throw "README release history markers must occur exactly once."
-}
+$downloadStart = "<!-- LHTPDF_DOWNLOAD_START -->"
+$downloadEnd = "<!-- LHTPDF_DOWNLOAD_END -->"
 
-$startIndex = $original.IndexOf($start)
-$endIndex = $original.IndexOf($end)
+function Replace-MarkedSection {
+    param(
+        [string]$Content,
+        [string]$StartMarker,
+        [string]$EndMarker,
+        [string]$Replacement,
+        [string]$Newline
+    )
 
-if ($endIndex -le $startIndex) {
-    throw "Invalid release history marker order."
+    if (
+        ([regex]::Matches($Content, [regex]::Escape($StartMarker))).Count -ne 1 -or
+        ([regex]::Matches($Content, [regex]::Escape($EndMarker))).Count -ne 1
+    ) {
+        throw "README markers must occur exactly once: $StartMarker"
+    }
+
+    $startIndex = $Content.IndexOf($StartMarker)
+    $endIndex = $Content.IndexOf($EndMarker)
+
+    if ($endIndex -le $startIndex) {
+        throw "Invalid README marker order: $StartMarker"
+    }
+
+    $contentStart = $startIndex + $StartMarker.Length
+
+    return $Content.Substring(0, $contentStart) +
+        $Newline +
+        $Replacement.TrimEnd() +
+        $Newline +
+        $Content.Substring($endIndex)
 }
 
 $headers = @{
@@ -48,8 +69,59 @@ if (-not [string]::IsNullOrWhiteSpace($env:GITHUB_TOKEN)) {
     $headers["Authorization"] = "Bearer $env:GITHUB_TOKEN"
 }
 
-$uri = "https://api.github.com/repos/$Repository/releases?per_page=30"
-$response = Invoke-RestMethod -Uri $uri -Headers $headers -Method Get
+$baseApi = "https://api.github.com/repos/$Repository"
+
+# Latest Stable: GitHub's official latest release endpoint.
+$latest = Invoke-RestMethod `
+    -Uri "$baseApi/releases/latest" `
+    -Headers $headers `
+    -Method Get
+
+if (
+    $latest.draft -or
+    $latest.prerelease -or
+    [string]::IsNullOrWhiteSpace($latest.tag_name)
+) {
+    throw "Cannot identify the latest Stable release."
+}
+
+# Identify actual assets, rather than constructing filenames.
+$latestAssets = @($latest.assets)
+
+$msiAssets = @(
+    $latestAssets | Where-Object {
+        $_.name -match '(?i)\.msi$' -and
+        $_.browser_download_url -match '^https://github\.com/'
+    }
+)
+
+$zipAssets = @(
+    $latestAssets | Where-Object {
+        $_.name -match '(?i)portable\.zip$' -and
+        $_.browser_download_url -match '^https://github\.com/'
+    }
+)
+
+if ($msiAssets.Count -ne 1 -or $zipAssets.Count -ne 1) {
+    throw "Latest Stable must contain exactly one MSI and one Portable ZIP."
+}
+
+$msiUrl = [string]$msiAssets[0].browser_download_url
+$zipUrl = [string]$zipAssets[0].browser_download_url
+
+# Download table: direct links to latest Stable assets.
+$downloadLines = @(
+    "| Tệp | Mô tả |"
+    "| --- | --- |"
+    "| [Tải MSI Installer]($msiUrl) | Cài đặt lhtPDF trên Windows |"
+    "| [Tải Portable ZIP]($zipUrl) | Giải nén và chạy ứng dụng |"
+)
+
+# History includes Stable and Pre-release.
+$response = Invoke-RestMethod `
+    -Uri "$baseApi/releases?per_page=30" `
+    -Headers $headers `
+    -Method Get
 
 $releases = @(
     @($response) |
@@ -64,8 +136,8 @@ $releases = @(
         Select-Object -First $MaxReleases
 )
 
-if (@($releases).Count -eq 0) {
-    throw "No published GitHub releases found."
+if ($releases.Count -eq 0) {
+    throw "No published releases found."
 }
 
 function Get-ShortDescription {
@@ -90,21 +162,10 @@ function Get-ShortDescription {
         $value = $value -replace '\[([^\]]+)\]\([^)]+\)', '$1'
         $value = $value -replace '[`*|]', ''
         $value = $value.Trim()
-        # Exclude Markdown table rows and release asset filenames.
+
         if (
             $line.TrimStart() -match '^\|' -or
             $value -match '\.(msi|zip|exe|txt)(\s|$)' -or
-            $value -match '^(?i:Highlights?|Downloads?|Assets?|Files?|Installation|Requirements|Changelog|Release\s+notes)\s*:?\s*$'
-        ) {
-            continue
-        }
-
-        # Skip Markdown table rows and structural labels.
-        if (
-            $value -match '^\s*\|.*\|\s*$' -or
-            $value -match '^\s*:?-{3,}:?(\s*:?-{3,}:?)*\s*$' -or
-            $value -match '^(?i:Tệp\s+Mô\s+tả|File\s+Description)$' -or
-            $value -match '^(?i:Highlights?|Key\s+changes?|Changes?|What.s\s+new|Downloads?|Assets?|Installation|Requirements)\s*:\s*$' -or
             $value -match '^https?://\S+$'
         ) {
             continue
@@ -126,8 +187,7 @@ function Get-ShortDescription {
     return @($items.ToArray())
 }
 
-$newline = if ($original.Contains("`r`n")) { "`r`n" } else { "`n" }
-$lines = New-Object 'System.Collections.Generic.List[string]'
+$historyLines = New-Object 'System.Collections.Generic.List[string]'
 
 foreach ($release in $releases) {
     $tag = [string]$release.tag_name
@@ -140,17 +200,17 @@ foreach ($release in $releases) {
     $date = ([datetime]$release.published_at).ToString("yyyy-MM-dd")
     $kind = if ($release.prerelease) { "Pre-release" } else { "Stable" }
 
-    $lines.Add("### [$tag]($url) — $date ($kind)")
-    $lines.Add("")
+    $historyLines.Add("### [$tag]($url) — $date ($kind)")
+    $historyLines.Add("")
 
     $description = @(Get-ShortDescription -Body ([string]$release.body))
 
     if ($description.Count -eq 0) {
-        $lines.Add("Xem mô tả đầy đủ tại GitHub Release.")
+        $historyLines.Add("Xem mô tả đầy đủ tại GitHub Release.")
     }
     else {
         foreach ($item in $description) {
-            $lines.Add("- $item")
+            $historyLines.Add("- $item")
         }
     }
 
@@ -171,35 +231,40 @@ foreach ($release in $releases) {
                 "Portable ZIP"
             }
 
-            $lines.Add(
+            $historyLines.Add(
                 "- [Tải $label]($($asset.browser_download_url))"
             )
         }
     }
 
-    $lines.Add("")
+    $historyLines.Add("")
 }
 
-$replacement = $newline +
-    ($lines.ToArray() -join $newline).TrimEnd() +
-    $newline
+$newline = if ($original.Contains("`r`n")) { "`r`n" } else { "`n" }
 
-$contentStart = $startIndex + $start.Length
+$updated = Replace-MarkedSection `
+    -Content $original `
+    -StartMarker $historyStart `
+    -EndMarker $historyEnd `
+    -Replacement ($historyLines.ToArray() -join $newline) `
+    -Newline $newline
 
-$updated = $original.Substring(0, $contentStart) +
-    $replacement +
-    $original.Substring($endIndex)
+$updated = Replace-MarkedSection `
+    -Content $updated `
+    -StartMarker $downloadStart `
+    -EndMarker $downloadEnd `
+    -Replacement ($downloadLines -join $newline) `
+    -Newline $newline
 
 if ($updated -ceq $original) {
-    Write-Host "README release history already up to date."
+    Write-Host "README already up to date."
     exit 0
 }
 
-[System.IO.File]::WriteAllText(
-    (Resolve-Path -LiteralPath $ReadmePath).Path,
-    $updated,
-    $utf8
-)
+[System.IO.File]::WriteAllText($path, $updated, $utf8)
 
-Write-Host "Updated README release history."
-Write-Host "Published releases included: $(@($releases).Count)"
+Write-Host "README updated successfully."
+Write-Host "Latest Stable: $($latest.tag_name)"
+Write-Host "MSI: $msiUrl"
+Write-Host "Portable ZIP: $zipUrl"
+Write-Host "History entries: $($releases.Count)"
