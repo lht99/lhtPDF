@@ -55,8 +55,8 @@ Một số chức năng phụ thuộc vào phiên bản ứng dụng và các th
 <!-- LHTPDF_DOWNLOAD_START -->
 | Tệp | Mô tả |
 | --- | --- |
-| [Tải MSI Installer](https://github.com/lht99/lhtPDF/releases/download/26.10.16/lhtPDF-26.10.16-windows-x64.msi) | Cài đặt lhtPDF trên Windows |
-| [Tải Portable ZIP](https://github.com/lht99/lhtPDF/releases/download/26.10.16/lhtPDF-26.10.16-windows-x64-portable.zip) | Giải nén và chạy ứng dụng |
+| [Tải MSI Installer](https://github.com/lht99/lhtPDF/releases/download/26.10.17/lhtPDF-26.10.17-windows-x64.msi) | Cài đặt lhtPDF trên Windows |
+| [Tải Portable ZIP](https://github.com/lht99/lhtPDF/releases/download/26.10.17/lhtPDF-26.10.17-windows-x64-portable.zip) | Giải nén và chạy ứng dụng |
 <!-- LHTPDF_DOWNLOAD_END -->
 
 ### Lưu ý Windows SmartScreen
@@ -68,6 +68,14 @@ Chỉ tải phần mềm từ kho GitHub chính thức hoặc website dự án. 
 ## Lịch sử phát hành
 
 <!-- LHTPDF_RELEASE_HISTORY_START -->
+### [26.10.17](https://github.com/lht99/lhtPDF/releases/tag/26.10.17) — 2026-10-16 (Stable)
+
+- lhtPDF is a free, open-source PDF editor for Windows.
+- Improved installation language selection and persistence.
+- Improved Vietnamese and English language handling.
+- [Tải MSI](https://github.com/lht99/lhtPDF/releases/download/26.10.17/lhtPDF-26.10.17-windows-x64.msi)
+- [Tải Portable ZIP](https://github.com/lht99/lhtPDF/releases/download/26.10.17/lhtPDF-26.10.17-windows-x64-portable.zip)
+
 ### [26.10.16](https://github.com/lht99/lhtPDF/releases/tag/26.10.16) — 2026-10-16 (Stable)
 
 - Bản phát hành chính thức (Stable) với các cải tiến về giao diện, tìm kiếm công cụ và kiểm tra cập nhật.
@@ -83,14 +91,6 @@ Chỉ tải phần mềm từ kho GitHub chính thức hoặc website dự án. 
 - MSI: Phù hợp để cài đặt trên máy tính.
 - [Tải MSI](https://github.com/lht99/lhtPDF/releases/download/2026.15.10/lhtPDF-2026.15.10-windows-x64.msi)
 - [Tải Portable ZIP](https://github.com/lht99/lhtPDF/releases/download/2026.15.10/lhtPDF-2026.15.10-windows-x64-portable.zip)
-
-### [v10.2.2](https://github.com/lht99/lhtPDF/releases/tag/v10.2.2) — 2026-10-14 (Pre-release)
-
-- lhtPDF 10.2.2 - Windows x64
-- First lhtPDF release based on the open-source PdfCraft project.
-- Highlights:
-- [Tải MSI](https://github.com/lht99/lhtPDF/releases/download/v10.2.2/lhtPDF-10.2.2-windows-x64.msi)
-- [Tải Portable ZIP](https://github.com/lht99/lhtPDF/releases/download/v10.2.2/lhtPDF-10.2.2-windows-x64-portable.zip)
 <!-- LHTPDF_RELEASE_HISTORY_END -->
 
 ## Hướng dẫn sử dụng
