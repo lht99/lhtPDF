@@ -2611,9 +2611,9 @@ signature pad	Type	Nhập chữ
 	{verb} as "{name}"	{verb} dưới tên "{name}"
 	Next tab	Tab tiếp theo
 	Previous tab	Tab trước
-Don't show today	Không hiện hôm nay
-Notify me about updates at startup	Thông báo phiên bản mới khi khởi động
-Download MSI	Tải bộ cài MSI
-The Windows MSI installer is not available for this release yet.	Bản phát hành này hiện chưa có bộ cài MSI dành cho Windows.
-View release	Xem bản phát hành
-You have version {c}. Download the Windows MSI installer below.	Bạn đang dùng phiên bản {c}. Hãy tải bộ cài MSI dành cho Windows bằng nút bên dưới.
+	Don't show today	Không hiện hôm nay
+	Notify me about updates at startup	Thông báo phiên bản mới khi khởi động
+	Download MSI	Tải bộ cài MSI
+	The Windows MSI installer is not available for this release yet.	Bản phát hành này hiện chưa có bộ cài MSI dành cho Windows.
+	View release	Xem bản phát hành
+	You have version {c}. Download the Windows MSI installer below.	Bạn đang dùng phiên bản {c}. Hãy tải bộ cài MSI dành cho Windows bằng nút bên dưới.
