@@ -51,7 +51,60 @@
     <!-- "Edit with lhtPDF" on the right-click menu of PDF files in File Explorer (#682): on by
          default, the same way, and INSTALLPDFCONTEXTMENU=0 for unattended installs without it. -->
     <Property Id="INSTALLPDFCONTEXTMENU" Value="1" Secure="yes" />
-    <Property Id="LHTPDF_LANGUAGE" Value="vi" Secure="yes" />
+    <Property Id="LHTPDF_LANGUAGE" Secure="yes" />
+    <!-- Read the installing user's existing language preference. -->
+    <Property Id="LHTPDF_SAVED_LANGUAGE">
+      <RegistrySearch
+          Id="LhtpdfSavedLanguageSearch"
+          Root="HKCU"
+          Key="Software\lhtPDF"
+          Name="Language"
+          Type="raw" />
+    </Property>
+
+    <!-- Use the current user's Windows language only when no lhtPDF
+         language preference has been saved. -->
+    <CustomAction Id="LhtpdfSelectWindowsVietnamese"
+        Property="LHTPDF_LANGUAGE" Value="vi" />
+    <!-- Apply a saved HKCU DWORD before the language dialog opens.
+         An explicit MSI command-line language choice remains authoritative. -->
+    <CustomAction Id="LhtpdfSelectSavedVietnamese"
+        Property="LHTPDF_LANGUAGE" Value="vi" />
+    <CustomAction Id="LhtpdfSelectSavedEnglish"
+        Property="LHTPDF_LANGUAGE" Value="en" />
+
+    <CustomAction Id="LhtpdfSelectDefaultEnglish"
+        Property="LHTPDF_LANGUAGE" Value="en" />
+    <InstallUISequence>
+      <Custom Action="LhtpdfSelectWindowsVietnamese"
+          After="AppSearch"
+          Condition="NOT LHTPDF_SAVED_LANGUAGE AND UserLanguageID = 1066 AND NOT LHTPDF_LANGUAGE" />
+      <Custom Action="LhtpdfSelectSavedVietnamese"
+          After="AppSearch"
+          Condition="LHTPDF_SAVED_LANGUAGE = &quot;#1&quot; AND NOT LHTPDF_LANGUAGE" />
+      <Custom Action="LhtpdfSelectSavedEnglish"
+          After="LhtpdfSelectSavedVietnamese"
+          Condition="LHTPDF_SAVED_LANGUAGE = &quot;#0&quot; AND NOT LHTPDF_LANGUAGE" />
+      <Custom Action="LhtpdfSelectDefaultEnglish"
+          After="LhtpdfSelectSavedEnglish"
+          Condition="NOT LHTPDF_LANGUAGE" />
+    </InstallUISequence>
+
+    <!-- Silent installs have no UI sequence. Preserve explicit command-line choices. -->
+    <InstallExecuteSequence>
+      <Custom Action="LhtpdfSelectWindowsVietnamese"
+          After="AppSearch"
+          Condition="NOT LHTPDF_SAVED_LANGUAGE AND UserLanguageID = 1066 AND NOT LHTPDF_LANGUAGE" />
+      <Custom Action="LhtpdfSelectSavedVietnamese"
+          After="AppSearch"
+          Condition="LHTPDF_SAVED_LANGUAGE = &quot;#1&quot; AND NOT LHTPDF_LANGUAGE" />
+      <Custom Action="LhtpdfSelectSavedEnglish"
+          After="LhtpdfSelectSavedVietnamese"
+          Condition="LHTPDF_SAVED_LANGUAGE = &quot;#0&quot; AND NOT LHTPDF_LANGUAGE" />
+      <Custom Action="LhtpdfSelectDefaultEnglish"
+          After="LhtpdfSelectSavedEnglish"
+          Condition="NOT LHTPDF_LANGUAGE" />
+    </InstallExecuteSequence>
     <UIRef Id="PdfcraftInstallerUI" />
 
     <StandardDirectory Id="ProgramFiles6432Folder">

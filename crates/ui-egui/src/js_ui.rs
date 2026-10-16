@@ -260,19 +260,20 @@ fn reading_mode_label(mode: &str) -> &'static str {
     }
 }
 
-/// Preferences: interface language and size, appearance, identity and JavaScript. Returns `true` to close.
-pub(crate) fn preferences_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
+/// Preferences: interface language and size, appearance, identity and JavaScript.
+pub(crate) fn preferences_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) {
     ui.label(egui::RichText::new(tl!("Preferences")).font(theme::semibold(18.0)));
     ui.horizontal(|ui| {
         ui.label(tl!("Interface language"));
-        let selected = crate::i18n::Lang::from_code(&app.language).map_or(tl!("Auto"), crate::i18n::Lang::name);
         let before = app.language.clone();
-        egui::ComboBox::from_id_salt("interface-language").selected_text(selected).show_ui(ui, |ui| {
-            if ui.selectable_value(&mut app.language, crate::i18n::AUTO.to_string(), tl!("Auto")).clicked() {
-                ui.close();
-            }
+        let selected = crate::i18n::Lang::from_code(&app.language).map_or(tl!("Auto"), crate::i18n::Lang::name);
+
+        let response = ui.button(format!("{selected}  ▾"));
+        egui::Popup::menu(&response).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
+            ui.set_min_width(response.rect.width());
             for language in crate::i18n::Lang::all() {
-                if ui.selectable_value(&mut app.language, language.code().to_string(), language.name()).clicked() {
+                if matches!(language.code(), "en" | "vi") && ui.selectable_label(app.language == language.code(), language.name()).clicked() {
+                    app.language = language.code().to_string();
                     ui.close();
                 }
             }
@@ -490,7 +491,6 @@ pub(crate) fn preferences_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tok
         );
     });
     ui.add_space(10.0);
-    buttons(ui, tl!("OK"), &[]).is_some()
 }
 
 /// Preferences ▸ Date format: a preset, or any pattern typed in, for Fill & Sign dates, and the

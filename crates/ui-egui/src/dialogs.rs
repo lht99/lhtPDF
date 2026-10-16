@@ -904,9 +904,30 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                 return;
             }
             Dialog::Preferences => {
-                // The settings outgrow a short window: scroll them rather than run off the screen.
-                let max = (ui.ctx().content_rect().height() - 120.0).max(200.0);
-                close = egui::ScrollArea::vertical().max_height(max).show(ui, |ui| crate::js_ui::preferences_body(ui, app, &t)).inner;
+                // Keep the action bar visible while the settings scroll.
+                let max = (ui.ctx().content_rect().height() - 190.0).max(160.0);
+                egui::ScrollArea::vertical().id_salt("preferences-scroll").max_height(max).show(ui, |ui| crate::js_ui::preferences_body(ui, app, &t));
+                ui.separator();
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    if widgets::pill_button(ui, tl!("Apply"), true).clicked() {
+                        // Other preferences apply immediately. Persist explicit
+                        // language choices for installed Windows copies.
+                        // Legacy "auto" remains valid without a Registry value.
+                        if matches!(app.language.as_str(), "en" | "vi") {
+                            match crate::language_registry::write(&app.language) {
+                                Ok(()) => close = true,
+                                Err(error) => {
+                                    app.notify(format!("Could not save interface language: {error}"));
+                                }
+                            }
+                        } else {
+                            close = true;
+                        }
+                    }
+                    if widgets::pill_button(ui, tl!("Close"), false).clicked() {
+                        close = true;
+                    }
+                });
                 return;
             }
             Dialog::RecognizeText => {

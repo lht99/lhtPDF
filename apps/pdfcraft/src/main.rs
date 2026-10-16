@@ -223,6 +223,19 @@ fn main() -> eframe::Result {
                 println!("pdfcraft {}", pdfcraft_engine::build_info::version());
                 return Ok(());
             }
+            #[cfg(target_os = "windows")]
+            "--set-install-language" => {
+                let language = args.next().unwrap_or_default();
+                if !matches!(language.as_str(), "en" | "vi") {
+                    eprintln!("Invalid install language. Expected en or vi.");
+                    std::process::exit(2);
+                }
+                if let Err(error) = pdfcraft_ui_egui::language_registry::write(&language) {
+                    eprintln!("{error}");
+                    std::process::exit(1);
+                }
+                return Ok(());
+            }
             "--control" => control_file = args.next(),
             "--create-images" => create_images = true,
             "--new-window" => new_window = true,
@@ -409,14 +422,31 @@ fn app_creator<'a>(
             }
         }
 
-        // Use the language chosen by the MSI only when the user has not
-
-        // saved a language preference. Portable installations are excluded
-        // by msi_install_language().
+        // For installed Windows copies, the per-user Registry preference
+        // takes priority over legacy RON and MSI language settings.
+        // Portable copies continue using their own saved preferences.
         #[cfg(target_os = "windows")]
-        if !has_saved_language {
-            if let Some(language) = msi_install_language() {
+        if pdfcraft_ui_egui::portable::data_dir().is_none() {
+            if let Some(language) = pdfcraft_ui_egui::language_registry::read() {
+                // A per-user preference always wins, including after MSI upgrades.
                 app.language = language.to_string();
+            } else if let Some(language) = saved_language.as_deref() {
+                // Migrate explicit legacy choices without overriding HKCU.
+                // "auto" remains a valid preference in the existing settings.
+                if matches!(language, "en" | "vi") {
+                    if let Err(error) = pdfcraft_ui_egui::language_registry::write(language) {
+                        log::warn!("Could not migrate per-user language: {error}");
+                    }
+                }
+            } else if !has_saved_language {
+                // Seed HKCU only when this user has no existing language choice.
+                // The application runs as the actual user, not the MSI service.
+                if let Some(language) = msi_install_language() {
+                    app.language = language.to_string();
+                    if let Err(error) = pdfcraft_ui_egui::language_registry::write(language) {
+                        log::warn!("Could not initialize per-user language: {error}");
+                    }
+                }
             }
         }
 

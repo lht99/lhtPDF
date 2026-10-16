@@ -105,17 +105,17 @@ jobs:
       - name: Build and package Windows x64
         shell: pwsh
         env:
-          DIST: ${{ github.workspace }}/dist/release-26.10.16
+          DIST: ${{ github.workspace }}/dist/release-26.10.17
         run: |
           ./packaging/windows/package.ps1 -Arch x64
 
       - name: Generate SHA256SUMS
         shell: pwsh
         run: |
-          $folder = "dist/release-26.10.16"
+          $folder = "dist/release-26.10.17"
           $names = @(
-            "lhtPDF-26.10.16-windows-x64.msi",
-            "lhtPDF-26.10.16-windows-x64-portable.zip"
+            "lhtPDF-26.10.17-windows-x64.msi",
+            "lhtPDF-26.10.17-windows-x64-portable.zip"
           )
           $lines = foreach ($name in $names) {
             $path = Join-Path $folder $name
@@ -132,10 +132,10 @@ jobs:
       - name: Upload verified build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: lhtPDF-26.10.16-windows-x64
+          name: lhtPDF-26.10.17-windows-x64
           path: |
-            dist/release-26.10.16/*.msi
-            dist/release-26.10.16/*.zip
-            dist/release-26.10.16/SHA256SUMS.txt
+            dist/release-26.10.17/*.msi
+            dist/release-26.10.17/*.zip
+            dist/release-26.10.17/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 30

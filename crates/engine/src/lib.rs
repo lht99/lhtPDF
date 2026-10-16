@@ -4691,15 +4691,11 @@ fn stamp_unicode_ocr(doc: &mut pdfcraft_cos::Document, page: usize, words: &[pdf
     use std::collections::BTreeMap;
 
     let ocr_font = |family: &str| -> Result<&'static [u8], EditError> {
-        pdfcraft_fonts::CRAFT_FONTS
-            .iter()
-            .find(|font| font.family == family && font.style == "Regular")
-            .map(|font| font.bytes)
-            .ok_or_else(|| {
-                EditError::Invalid(format!(
-                    "OCR Unicode font '{family}' is unavailable; rebuild with CRAFT_FONTS_DIR pointing to a checkout containing this font"
-                ))
-            })
+        pdfcraft_fonts::CRAFT_FONTS.iter().find(|font| font.family == family && font.style == "Regular").map(|font| font.bytes).ok_or_else(|| {
+            EditError::Invalid(format!(
+                "OCR Unicode font '{family}' is unavailable; rebuild with CRAFT_FONTS_DIR pointing to a checkout containing this font"
+            ))
+        })
     };
 
     let is_korean = |text: &str| {
