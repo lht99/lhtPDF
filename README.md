@@ -55,10 +55,12 @@ Một số chức năng phụ thuộc vào phiên bản ứng dụng và các th
 
 Bản phát hành hiện được đánh dấu **release**.
 
+
 | Tệp | Mô tả |
 | --- | --- |
-| [Download](https://img.shields.io/github/v/release/lht99/lhtPDF?label=Download&color=blue)](https://github.com/lht99/lhtPDF/releases/latest) | Cài đặt lhtPDF trên Windows |
-| [Bản Portable ZIP](https://github.com/lht99/lhtPDF/releases/download/26.10.16/lhtPDF-26.10.16-windows-x64-portable.zip) | Giải nén và chạy ứng dụng |
+| [![Download MSI](https://img.shields.io/badge/Download-MSI-blue?logo=windows)](https://github.com/lht99/lhtPDF/releases/latest) | Cài đặt lhtPDF trên Windows |
+| [![Download ZIP](https://img.shields.io/badge/Download-Portable_ZIP-green?logo=windows)](https://github.com/lht99/lhtPDF/releases/latest) | Giải nén và chạy ứng dụng |
+
 
 ### Lưu ý Windows SmartScreen
 
