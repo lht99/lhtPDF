@@ -1,7 +1,7 @@
 ﻿param(
     [string]$Repository = "lht99/lhtPDF",
     [string]$ReadmePath = "README.md",
-    [int]$MaxReleases = 5
+    [int]$MaxReleases = 3
 )
 
 $ErrorActionPreference = "Stop"
