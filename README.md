@@ -55,8 +55,8 @@ Một số chức năng phụ thuộc vào phiên bản ứng dụng và các th
 <!-- LHTPDF_DOWNLOAD_START -->
 | Tệp | Mô tả |
 | --- | --- |
-| [Tải MSI Installer](https://github.com/lht99/lhtPDF/releases/download/26.10.16/lhtPDF-26.10.1-windows-x64.msi) | Cài đặt lhtPDF trên Windows |
-| [Tải Portable ZIP](https://github.com/lht99/lhtPDF/releases/download/26.10.16/lhtPDF-26.10.1-windows-x64-portable.zip) | Giải nén và chạy ứng dụng |
+| [Tải MSI Installer](https://github.com/lht99/lhtPDF/releases/download/26.10.16/lhtPDF-26.10.16-windows-x64.msi) | Cài đặt lhtPDF trên Windows |
+| [Tải Portable ZIP](https://github.com/lht99/lhtPDF/releases/download/26.10.16/lhtPDF-26.10.16-windows-x64-portable.zip) | Giải nén và chạy ứng dụng |
 <!-- LHTPDF_DOWNLOAD_END -->
 
 ### Lưu ý Windows SmartScreen
