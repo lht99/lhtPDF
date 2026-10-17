@@ -261,7 +261,7 @@ fn reading_mode_label(mode: &str) -> &'static str {
 }
 
 /// Preferences: interface language and size, appearance, identity and JavaScript.
-pub(crate) fn preferences_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) {
+pub(crate) fn preferences_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
     ui.label(egui::RichText::new(tl!("Preferences")).font(theme::semibold(18.0)));
     ui.horizontal(|ui| {
         ui.label(tl!("Interface language"));
@@ -404,39 +404,47 @@ pub(crate) fn preferences_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tok
     // remapped while rendering, and the page clears to the background colour. The preference
     // is app-wide: every open document follows it, and documents open with it.
     ui.label(egui::RichText::new(tl!("Reading colours")).font(theme::semibold(13.0)));
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         ui.label(tl!("Replace document colours"));
+
         let mode = app.reading_colors.mode_name();
-        egui::ComboBox::from_id_salt("reading-colors").selected_text(tl!(reading_mode_label(mode))).show_ui(ui, |ui| {
-            for (m, label) in [
-                ("off", "Off"),
-                ("black-on-white", "Black on white"),
-                ("white-on-black", "White on black"),
-                ("yellow-on-black", "Yellow on black"),
-                ("green-on-black", "Green on black"),
-                ("custom", "Custom"),
-            ] {
-                if ui.selectable_label(mode == m, tl!(label)).clicked() {
-                    match m {
-                        "off" => app.set_reading_colors(pdfcraft_render::ReadingColors::default()),
-                        "custom" => {
-                            // Custom starts from the colours already chosen, or black on white.
-                            let colors = app.reading_colors.params.map_or(pdfcraft_render::ReadingColors::BLACK_ON_WHITE, |params| {
-                                pdfcraft_render::ReadingColors { params: Some(params) }
-                            });
+
+        for (m, label) in [
+            ("off", "Off"),
+            ("black-on-white", "Black on white"),
+            ("white-on-black", "White on black"),
+            ("yellow-on-black", "Yellow on black"),
+            ("green-on-black", "Green on black"),
+            ("custom", "Custom"),
+        ] {
+            if ui.selectable_label(mode == m, tl!(label)).clicked() {
+                match m {
+                    "off" => {
+                        app.set_reading_colors(
+                            pdfcraft_render::ReadingColors::default()
+                        );
+                    }
+                    "custom" => {
+                        let colors = app.reading_colors.params.map_or(
+                            pdfcraft_render::ReadingColors::BLACK_ON_WHITE,
+                            |params| pdfcraft_render::ReadingColors {
+                                params: Some(params)
+                            },
+                        );
+                        app.set_reading_colors(colors);
+                    }
+                    preset => {
+                        if let Ok(colors) =
+                            pdfcraft_render::ReadingColors::parse(
+                                preset, None, None, None, None
+                            )
+                        {
                             app.set_reading_colors(colors);
                         }
-                        // `parse` knows these names; a preset comes with its own flags.
-                        preset => {
-                            if let Ok(colors) = pdfcraft_render::ReadingColors::parse(preset, None, None, None, None) {
-                                app.set_reading_colors(colors);
-                            }
-                        }
                     }
-                    ui.close();
                 }
             }
-        });
+        }
     });
     if app.reading_colors.params.is_some() {
         let mut changed = false;
@@ -489,6 +497,8 @@ pub(crate) fn preferences_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tok
         );
     });
     ui.add_space(10.0);
+
+    false
 }
 
 /// Preferences ▸ Date format: a preset, or any pattern typed in, for Fill & Sign dates, and the
@@ -499,22 +509,24 @@ fn date_format(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) {
     ui.label(egui::RichText::new(tl!("Date format")).font(theme::semibold(13.0)));
     let sample = |app: &PdfCraftApp, f: &str| format!("{}   {f}", app.date_text(Some(f)).unwrap_or_default());
     ui.horizontal(|ui| {
-        let label = ui.label(tl!("Fill & Sign dates"));
+        ui.label(tl!("Fill & Sign dates"));
+
         let current = app.session.date_format().to_string();
-        let selected = if DATE_FORMATS.contains(&current.as_str()) { sample(app, &current) } else { tl!("Custom").to_string() };
-        egui::ComboBox::from_id_salt("date-format")
+        let selected = sample(app, &current);
+
+        egui::ComboBox::from_id_salt("preferences-date-format")
             .selected_text(selected)
-            .width(240.0)
+            .width(290.0)
             .show_ui(ui, |ui| {
                 for f in DATE_FORMATS {
-                    if ui.selectable_label(current == f, sample(app, f)).clicked() && app.session.set_date_format(f).is_ok() {
-                        app.date_format_draft = None;
+                    if ui.selectable_label(current == f, sample(app, f)).clicked() {
+                        if app.session.set_date_format(f).is_ok() {
+                            app.date_format_draft = None;
+                        }
                         ui.close();
                     }
                 }
-            })
-            .response
-            .labelled_by(label.id);
+            });
     });
     ui.horizontal(|ui| {
         let label = ui.label(tl!("Pattern"));

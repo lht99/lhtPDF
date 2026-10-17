@@ -57,17 +57,51 @@ if (-not $env:PDFCRAFT_BUILD_DATE) { $env:PDFCRAFT_BUILD_DATE = (Get-Date).ToUni
 
 Write-Output "PdfCraft $Version for Windows $Arch ($Target)"
 
-if (-not $SkipBuild) {
-  # Static CRT: no VC++ redistributable needed. Scoped to the target so host build scripts and
-  # proc-macros are unaffected.
-  $flagVar = 'CARGO_TARGET_' + ($Target.ToUpper() -replace '-', '_') + '_RUSTFLAGS'
-  [Environment]::SetEnvironmentVariable($flagVar, '-C target-feature=+crt-static')
-  # Fail the build (rather than warn) if the icon/VERSIONINFO can't be embedded.
-  $env:PDFCRAFT_REQUIRE_WINRES = '1'
-  Invoke-Native "cargo build ($Target)" { cargo build --release --locked -j 18 -p pdfcraft -p pdfcraft-cli --target $Target }
+# One canonical binary source for Windows x64 releases.
+# MSI and portable ZIP always use the same Release executables.
+if ($Arch -eq 'x64') {
+  $Bin = Join-Path $TargetDir 'release'
+} else {
+  $Bin = Join-Path $TargetDir "$Target\release"
 }
 
-$Bin = Join-Path $TargetDir "$Target\release"
+if (-not $SkipBuild) {
+  # Static CRT: no VC++ redistributable needed.
+  # Apply target-specific flags without changing host build scripts.
+  $flagVar = 'CARGO_TARGET_' + ($Target.ToUpper() -replace '-', '_') + '_RUSTFLAGS'
+  [Environment]::SetEnvironmentVariable($flagVar, '-C target-feature=+crt-static')
+  $env:PDFCRAFT_REQUIRE_WINRES = '1'
+
+  if ($Arch -eq 'x64') {
+    Invoke-Native 'cargo build (canonical x64 Release)' {
+      cargo build --release --locked -j 20 -p pdfcraft -p pdfcraft-cli
+    }
+  } else {
+    Invoke-Native "cargo build ($Target)" {
+      cargo build --release --locked -j 20 -p pdfcraft -p pdfcraft-cli --target $Target
+    }
+  }
+}
+
+# Never package an executable reporting a different release version.
+if ($Arch -eq 'x64') {
+  $CliPath = Join-Path $Bin 'pdfcraft-cli.exe'
+  if (-not (Test-Path -LiteralPath $CliPath -PathType Leaf)) {
+    throw "Missing Release CLI: $CliPath"
+  }
+
+  $CliVersionOutput = & $CliPath --version
+  if ($LASTEXITCODE -ne 0) {
+    throw 'Release CLI version check failed'
+  }
+
+  $ExpectedVersionLine = "lhtPDF $Version"
+  if (@($CliVersionOutput) -notcontains $ExpectedVersionLine) {
+    throw "Release CLI version mismatch: expected $ExpectedVersionLine; got $($CliVersionOutput -join '; ')"
+  }
+
+  Write-Output "ok Release CLI version: $ExpectedVersionLine"
+}
 
 # Check both binaries' PE headers before packaging. Machine (COFF header) must match -Arch, so an
 # x64 build can never ship labelled arm64 (#61). Subsystem (optional header): 2 = Windows GUI,

@@ -49,6 +49,7 @@ mod crop;
 mod drag_pointer;
 mod export_ui;
 mod js_ui;
+mod preferences_components;
 mod marks_ui;
 mod measure_ui;
 mod ocr_ui;
