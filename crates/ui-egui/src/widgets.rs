@@ -34,6 +34,27 @@ pub fn show_modal<R>(ctx: &egui::Context, id: &str, content: impl FnOnce(&mut eg
     modal(ctx, id).show(ctx, |ui| {
         begin_dialog(ui);
         let inner = content(ui);
+
+        // A ComboBox popup and its parent Modal both use Foreground.
+        // Keep the popup immediately above the Modal that owns it.
+        let modal_layer = ui.layer_id();
+        let popup_layers = ui.ctx().memory(|memory| {
+            memory
+                .areas()
+                .visible_layer_ids()
+                .into_iter()
+                .filter(|layer| {
+                    layer.order == egui::Order::Foreground
+                        && *layer != modal_layer
+                        && egui::Popup::is_id_open(ui.ctx(), layer.id)
+                })
+                .collect::<Vec<_>>()
+        });
+
+        for popup_layer in popup_layers {
+            ui.ctx().set_sublayer(modal_layer, popup_layer);
+        }
+
         // The frame's stroke sits outside this content rect; the stored card is the fill.
         let card = ui.min_rect().expand2(egui::vec2(f32::from(DIALOG_PAD_X), f32::from(DIALOG_PAD_Y)));
         ui.ctx().data_mut(|d| d.insert_temp(stored.with("card"), card));
