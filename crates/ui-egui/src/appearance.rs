@@ -88,9 +88,16 @@ mod tests {
             h.render().unwrap().save(path).unwrap();
         }
 
+        // The appearance choices are only accessible while the dropdown is open.
+        h.get_by_value("Light").click();
+        h.run();
         h.get_by_label("Dark").click();
         h.run();
         assert_eq!(h.state().theme_preference, ThemePreference::Dark);
+
+        // Reopen the dropdown before restoring the system appearance.
+        h.get_by_value("Dark").click();
+        h.run();
         h.get_by_label("Use system setting").click();
         h.run();
         assert_eq!(h.state().theme_preference, ThemePreference::System);

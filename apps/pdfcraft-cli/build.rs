@@ -18,8 +18,8 @@ fn main() {
         .set("LegalCopyright", "Copyright (c) the PdfCraft contributors. MIT OR Apache-2.0.")
         .set("OriginalFilename", "pdfcraft-cli.exe")
         .set("InternalName", "pdfcraft-cli")
-        .set("FileVersion", "10.3.0.0")
-        .set("ProductVersion", "10.3.0.0");
+        .set("FileVersion", env!("CARGO_PKG_VERSION"))
+        .set("ProductVersion", env!("CARGO_PKG_VERSION"));
     if let Err(e) = res.compile() {
         if std::env::var_os("PDFCRAFT_REQUIRE_WINRES").is_some() {
             println!("cargo::error=embedding Windows resources failed: {e}");
