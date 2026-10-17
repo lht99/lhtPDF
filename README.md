@@ -70,9 +70,9 @@ Chỉ tải phần mềm từ kho GitHub chính thức hoặc website dự án. 
 <!-- LHTPDF_RELEASE_HISTORY_START -->
 ### [26.10.19](https://github.com/lht99/lhtPDF/releases/tag/26.10.19) — 2026-10-17 (Stable)
 
-- Windows Release  Preferences & UI Improvements
-- This release focuses on improving the Preferences experience, refining interface controls, and making Windows release packaging more consistent and reliable.
-- Preferences & Appearance
+- Phiên bản Windows 64-bit  Cải tiến Cài đặt và giao diện
+- Phiên bản 26.10.19 tập trung hoàn thiện trải nghiệm sử dụng, cải tiến giao diện Cài đặt (Preferences), đồng bộ các thành phần điều khiển và nâng cao độ tin c...
+- Tinh chỉnh giao diện Cài đặt theo hướng gọn gàng, trực quan và thống nhất hơn.
 - [Tải MSI](https://github.com/lht99/lhtPDF/releases/download/26.10.19/lhtPDF-26.10.19-windows-x64.msi)
 - [Tải Portable ZIP](https://github.com/lht99/lhtPDF/releases/download/26.10.19/lhtPDF-26.10.19-windows-x64-portable.zip)
 
