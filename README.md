@@ -10,7 +10,7 @@
 
 ![Phiên bản](https://img.shields.io/github/v/release/lht99/lhtPDF?label=Version)
 ![Total Downloads](https://img.shields.io/github/downloads/lht99/lhtPDF/total?style=flat-square&color=blue)
-[MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE-MIT)
+![MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE-MIT)
 [![Apache](https://img.shields.io/badge/License-Apache_2.0-green)](LICENSE-APACHE)
 
 **[TẢI LHTPDF](https://github.com/lht99/lhtPDF/releases/latest)** |
