@@ -195,7 +195,10 @@ pub struct TextEditLayout {
 }
 
 pub fn text_edit_layout(doc: &Document, page: usize, block: usize, text: &str, style: &BlockStyle) -> Result<TextEditLayout, EditError> {
-    let original = text_blocks(doc, page)?;
+    // This runs on every keystroke: read the page once for the paragraphs, the untouched runs
+    // and the rewrite, which starts from the same unchanged page.
+    let lines = text_lines(doc, page)?;
+    let original = group_blocks(&lines);
     let source = original.get(block).ok_or(EditError::Invalid("text block does not exist".into()))?;
     if text == source.editor_text && *style == BlockStyle::default() {
         return Ok(TextEditLayout { source_rect: source.rect, draft_rect: Some(source.rect), overflow: false });
@@ -205,13 +208,13 @@ pub fn text_edit_layout(doc: &Document, page: usize, block: usize, text: &str, s
     let key =
         |line: &TextLine| (line.text.clone(), line.font.clone(), line.rect.map(f64::to_bits), line.size.to_bits(), line.color.map(f64::to_bits));
     let mut untouched = std::collections::BTreeMap::new();
-    for (index, line) in text_lines(doc, page)?.iter().enumerate() {
+    for (index, line) in lines.iter().enumerate() {
         if !source.lines.contains(&index) {
             *untouched.entry(key(line)).or_insert(0_usize) += 1;
         }
     }
     let mut draft = doc.clone();
-    rewrite_block(&mut draft, page, block, Some(text), style)?;
+    rewrite_block_from(&mut draft, page, lines, block, Some(text), style, MAX_TYPE3_GLYPHS)?;
     let mut rect: Option<[f64; 4]> = None;
     for line in text_lines(&draft, page)? {
         if let Some(count) = untouched.get_mut(&key(&line))
@@ -318,17 +321,17 @@ pub struct TextBlock {
 }
 
 impl TextBlock {
-    /// Preserve styles outside the changed range; inserted characters inherit the surrounding
-    /// source run. Byte ranges are always UTF-8 boundaries. Linear time, including large edits.
+    /// Preserve styles outside the changed ranges; inserted characters inherit the surrounding
+    /// source run. The texts are aligned word by word, so words left untouched between two edits
+    /// keep their own runs (#2198); past [`MAX_CHANGED_WORDS`] the draft counts as one change.
+    /// Byte ranges are always UTF-8 boundaries. Linear time, including large edits.
     pub fn edited_spans(&self, draft: &str) -> Vec<(std::ops::Range<usize>, usize)> {
         if self.editor_text.len() > 4_000_000 || draft.len() > 4_000_000 {
             return vec![(0..draft.len(), self.lines.first().copied().unwrap_or(0))];
         }
         let old: Vec<_> = self.editor_text.chars().collect();
         let new: Vec<_> = draft.char_indices().collect();
-        let prefix = old.iter().zip(&new).take_while(|(a, (_, b))| *a == b).count();
-        let suffix =
-            old.iter().rev().zip(new.iter().rev()).take(old.len().min(new.len()).saturating_sub(prefix)).take_while(|(a, (_, b))| *a == b).count();
+        let chars: Vec<_> = new.iter().map(|(_, c)| *c).collect();
         let mut original = Vec::with_capacity(old.len());
         let mut span = 0;
         for (byte, _) in self.editor_text.char_indices() {
@@ -337,17 +340,36 @@ impl TextBlock {
             }
             original.push(self.spans.get(span).or_else(|| self.spans.last()).map_or(0, |(_, i)| *i));
         }
-        let inherited = original.get(prefix.saturating_sub(1)).or_else(|| original.get(prefix)).copied().unwrap_or(0);
+        let mut sources = Vec::with_capacity(new.len());
+        let slices = |text: &[char]| words(text).into_iter().map(|w| text.get(w).unwrap_or_default().to_vec()).collect::<Vec<_>>();
+        let (old_words, new_words) = (slices(&old), slices(&chars));
+        match edit_script(&old_words, &new_words, MAX_CHANGED_WORDS) {
+            Some(script) => {
+                // `(o, n)`: where the current change starts in the old and new text; `(x, y)`: where it ends.
+                let ((mut o, mut n), (mut x, mut y)) = ((0, 0), (0, 0));
+                let (mut a, mut b) = (old_words.iter(), new_words.iter());
+                for step in script {
+                    match step {
+                        Step::Keep => {
+                            replaced(&original, o, old.get(o..x).unwrap_or_default(), chars.get(n..y).unwrap_or_default(), &mut sources);
+                            let len = a.next().map_or(0, Vec::len);
+                            b.next();
+                            sources.extend(original.get(x..x.saturating_add(len)).unwrap_or_default());
+                            (x, y) = (x.saturating_add(len), y.saturating_add(len));
+                            (o, n) = (x, y);
+                        }
+                        Step::Delete => x = x.saturating_add(a.next().map_or(0, Vec::len)),
+                        Step::Insert => y = y.saturating_add(b.next().map_or(0, Vec::len)),
+                    }
+                }
+                replaced(&original, o, old.get(o..x).unwrap_or_default(), chars.get(n..y).unwrap_or_default(), &mut sources);
+            }
+            None => replaced(&original, 0, &old, &chars, &mut sources),
+        }
+        let fallback = original.first().copied().unwrap_or(0);
         let mut result: Vec<(std::ops::Range<usize>, usize)> = Vec::new();
         for (i, (byte, ch)) in new.iter().enumerate() {
-            let source = if i < prefix {
-                original.get(i).copied()
-            } else if i >= new.len().saturating_sub(suffix) {
-                original.get(old.len().saturating_sub(new.len() - i)).copied()
-            } else {
-                Some(inherited)
-            }
-            .unwrap_or(inherited);
+            let source = sources.get(i).copied().unwrap_or(fallback);
             let end = byte.saturating_add(ch.len_utf8());
             if let Some((range, _)) = result.last_mut().filter(|(_, prev)| *prev == source) {
                 range.end = end;
@@ -356,6 +378,108 @@ impl TextBlock {
             }
         }
         result
+    }
+}
+
+/// Changed words [`TextBlock::edited_spans`] aligns before it treats the draft as one change.
+/// Myers' diff costs O((N + M) · D), so bounding D keeps it linear.
+const MAX_CHANGED_WORDS: usize = 64;
+
+/// `text` split into words, each with the whitespace after it, as char ranges.
+fn words(text: &[char]) -> Vec<std::ops::Range<usize>> {
+    let mut out = Vec::new();
+    let mut start = 0;
+    for (i, pair) in text.windows(2).enumerate() {
+        if let [a, b] = pair
+            && a.is_whitespace()
+            && !b.is_whitespace()
+        {
+            out.push(start..i + 1);
+            start = i + 1;
+        }
+    }
+    if start < text.len() {
+        out.push(start..text.len());
+    }
+    out
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Step {
+    Keep,
+    Delete,
+    Insert,
+}
+
+/// Myers' shortest edit script from `a` to `b`, or `None` when it takes more than `max` steps.
+fn edit_script<T: PartialEq>(a: &[T], b: &[T], max: usize) -> Option<Vec<Step>> {
+    let (n, m) = (a.len() as isize, b.len() as isize);
+    let max = max.min(a.len().saturating_add(b.len())) as isize;
+    // Furthest x reached on each diagonal k = x - y, stored at k + max + 1.
+    let at = |v: &[isize], k: isize| usize::try_from(k + max + 1).ok().and_then(|i| v.get(i).copied()).unwrap_or(0);
+    let mut v = vec![0isize; (2 * max + 3) as usize];
+    let mut trace = Vec::new();
+    for d in 0..=max {
+        trace.push(v.clone());
+        for k in (-d..=d).step_by(2) {
+            let down = k == -d || (k != d && at(&v, k - 1) < at(&v, k + 1));
+            let mut x = if down { at(&v, k + 1) } else { at(&v, k - 1) + 1 };
+            let mut y = x - k;
+            while x < n && y < m && a.get(x as usize) == b.get(y as usize) {
+                x += 1;
+                y += 1;
+            }
+            if let Some(slot) = usize::try_from(k + max + 1).ok().and_then(|i| v.get_mut(i)) {
+                *slot = x;
+            }
+            if x >= n && y >= m {
+                return Some(backtrack(&trace, n, m, max));
+            }
+        }
+    }
+    None
+}
+
+/// Walk Myers' saved frontiers back from the end to the edit script.
+fn backtrack(trace: &[Vec<isize>], n: isize, m: isize, max: isize) -> Vec<Step> {
+    let at = |v: &[isize], k: isize| usize::try_from(k + max + 1).ok().and_then(|i| v.get(i).copied()).unwrap_or(0);
+    let mut steps = Vec::new();
+    let (mut x, mut y) = (n, m);
+    for (d, v) in trace.iter().enumerate().rev() {
+        let (d, k) = (d as isize, x - y);
+        let prev_k = if k == -d || (k != d && at(v, k - 1) < at(v, k + 1)) { k + 1 } else { k - 1 };
+        let prev_x = at(v, prev_k);
+        let prev_y = prev_x - prev_k;
+        while x > prev_x && y > prev_y {
+            steps.push(Step::Keep);
+            x -= 1;
+            y -= 1;
+        }
+        if d > 0 {
+            steps.push(if x == prev_x { Step::Insert } else { Step::Delete });
+        }
+        (x, y) = (prev_x, prev_y);
+    }
+    steps.reverse();
+    steps
+}
+
+/// `old`, at char `at` of the source, became `new`: characters kept at either end keep their
+/// runs, and the rest inherit the run just before the change (or the first one it replaces).
+fn replaced(original: &[usize], at: usize, old: &[char], new: &[char], out: &mut Vec<usize>) {
+    let prefix = old.iter().zip(new).take_while(|(a, b)| a == b).count();
+    let suffix = old.iter().rev().zip(new.iter().rev()).take(old.len().min(new.len()).saturating_sub(prefix)).take_while(|(a, b)| a == b).count();
+    let start = at.saturating_add(prefix);
+    let inherited = start.checked_sub(1).and_then(|i| original.get(i)).or_else(|| original.get(start)).copied().unwrap_or(0);
+    for i in 0..new.len() {
+        let source = if i < prefix {
+            original.get(at.saturating_add(i)).copied()
+        } else if i >= new.len().saturating_sub(suffix) {
+            original.get(at.saturating_add(old.len()).saturating_sub(new.len() - i)).copied()
+        } else {
+            Some(inherited)
+        };
+        out.push(source.unwrap_or(inherited));
     }
 }
 
@@ -1221,6 +1345,22 @@ fn unicode_hex(ch: char) -> String {
     encoded.iter().map(|u| format!("{u:04X}")).collect()
 }
 
+/// No font this build has can draw `text`. Only Japanese text is about the Japanese face: other
+/// characters are missing from the paragraph's font, and choosing a font that has them works too.
+fn no_fallback_font(text: &str) -> EditError {
+    let japanese = |c: char| matches!(u32::from(c), 0x3000..=0x30FF | 0x3400..=0x4DBF | 0x4E00..=0x9FFF | 0xF900..=0xFAFF | 0xFF00..=0xFFEF);
+    if text.chars().any(japanese) {
+        return no_japanese_font();
+    }
+    let Some(ch) = text.chars().find(|c| !c.is_whitespace() && !is_win_ansi_char(*c)) else { return no_japanese_font() };
+    EditError::Invalid(format!(
+        "the paragraph's font has no glyph for {ch} (U+{:04X}) and this build has no fallback font for it; \
+         choose a font that has it (Load font… or Installed fonts…), or use an official release, which includes \
+         PdfCraft's fallback fonts (to build them in, set CRAFT_FONTS_DIR to a craft-fonts checkout)",
+        u32::from(ch)
+    ))
+}
+
 /// This build has no Japanese face to draw replacement text with.
 fn no_japanese_font() -> EditError {
     EditError::Invalid(
@@ -1285,7 +1425,7 @@ fn type3_font(
     // character. When none has them all, the best face reports the character it lacks. Hebrew
     // text keeps the Hebrew face and takes each character it lacks from the next face that has it.
     let face = if hebrew { faces.first().copied() } else { fallback_face(&faces, &chars, |face, ch| japanese_glyph_from(face, ch).is_ok()) }
-        .ok_or_else(no_japanese_font)?;
+        .ok_or_else(|| no_fallback_font(text))?;
     let others: &[&CraftFont] = if hebrew { faces.get(1..).unwrap_or_default() } else { &[] };
     // Every outline is read before the document is touched, so a character that fails leaves it
     // as it was. Each font takes the next `per_font` characters; codes restart at 1 in each.
@@ -1391,6 +1531,28 @@ fn type3_encode(fallback: &Type3Fallback, text: &str) -> Option<Vec<(String, Vec
         }
     }
     runs.into_iter().map(|(font, bytes)| Some((fallback.names.get(font)?.clone(), bytes))).collect()
+}
+
+/// The source font's own TrueType/OpenType program, when the document embeds a complete one whose
+/// licence allows editable embedding. A subset (an `ABCDEF+` name) is left out: a character can keep
+/// its mapping there after the subsetter dropped its outline.
+fn source_program(doc: &Document, fonts: &Dict, name: &str) -> Option<Vec<u8>> {
+    let font = fonts.get(name.as_bytes()).and_then(|f| doc.resolve(f).as_dict().cloned())?;
+    let base = Metrics::from_dict(doc, &font).base_font;
+    if base.split_once('+').is_some_and(|(tag, _)| tag.len() == 6 && tag.bytes().all(|b| b.is_ascii_uppercase())) {
+        return None;
+    }
+    let bytes = pdfcraft_fonts::pdf::embedded_sfnt(doc, &font)?;
+    pdfcraft_fonts::embedding::validate(&bytes).is_ok().then_some(bytes)
+}
+
+/// Whether `text` has characters `line`'s font can't encode that its own program can draw.
+fn source_program_completes(doc: &Document, fonts: &Dict, line: &TextLine, text: &str) -> bool {
+    let Some(metrics) = fonts.get(line.font.as_bytes()).and_then(|f| doc.resolve(f).as_dict().cloned()).map(|f| Metrics::from_dict(doc, &f)) else {
+        return false;
+    };
+    let missing: String = text.chars().filter(|c| !c.is_whitespace() && !source_encodes(&metrics, &c.to_string())).collect();
+    !missing.is_empty() && source_program(doc, fonts, &line.font).is_some_and(|bytes| pdfcraft_fonts::embedding::covers(&bytes, &missing))
 }
 
 /// A subset may contain all the letters but no space glyph: producers use another subset
@@ -1666,17 +1828,24 @@ fn paragraph_separator(c: char) -> bool {
     c.is_whitespace() && c != '\u{3000}'
 }
 
-/// Greedy word wrapping to `width` with `advance` giving a string's width.
+/// Greedy word wrapping to `width` with `advance` giving a string's width. A row may also end
+/// inside a word of Chinese or Japanese text ([`crate::linebreak`]); those pieces join without a space.
 fn wrap(text: &str, width: f64, advance: impl Fn(&str) -> f64) -> Vec<String> {
     let mut out = Vec::new();
     let mut line = String::new();
     for word in text.split(paragraph_separator).filter(|word| !word.is_empty()) {
-        let candidate = if line.is_empty() { word.to_string() } else { format!("{line} {word}") };
-        if !line.is_empty() && advance(&candidate) > width {
-            out.push(std::mem::take(&mut line));
-            line = word.to_string();
-        } else {
-            line = candidate;
+        for (i, piece) in crate::linebreak::pieces(word).into_iter().enumerate() {
+            let candidate = match (line.is_empty(), i) {
+                (true, _) => piece.to_string(),
+                (false, 0) => format!("{line} {piece}"),
+                (false, _) => format!("{line}{piece}"),
+            };
+            if !line.is_empty() && advance(&candidate) > width {
+                out.push(std::mem::take(&mut line));
+                line = piece.to_string();
+            } else {
+                line = candidate;
+            }
         }
     }
     if !line.is_empty() || out.is_empty() {
@@ -1751,6 +1920,19 @@ pub(crate) fn rewrite_block_with_limit(
     max_glyphs: usize,
 ) -> Result<LineEdit, EditError> {
     let lines = text_lines(doc, page)?;
+    rewrite_block_from(doc, page, lines, block, text, style, max_glyphs)
+}
+
+/// [`rewrite_block_with_limit`] with the page's [`text_lines`], read from `doc` as it is now.
+fn rewrite_block_from(
+    doc: &mut Document,
+    page: usize,
+    lines: Vec<TextLine>,
+    block: usize,
+    text: Option<&str>,
+    style: &BlockStyle,
+    max_glyphs: usize,
+) -> Result<LineEdit, EditError> {
     let blocks = group_blocks(&lines);
     let b = blocks.get(block).cloned().ok_or_else(|| EditError::Invalid(format!("page {} has no paragraph {}", page + 1, block + 1)))?;
     let members: Vec<&TextLine> = b.lines.iter().map(|i| &lines[*i]).collect();
@@ -1777,6 +1959,7 @@ pub(crate) fn rewrite_block_with_limit(
                     || pdfcraft_fonts::source_shaping::required(draft)
                     || !pdfcraft_fonts::embedding::matching_faces(&b.base_font).is_empty()
             }) || registered_face
+                || text.is_some_and(|draft| source_program_completes(doc, &fonts_res, first, draft))
                 || b.rows.iter().any(|row| row.len() > 1)
                 || members.iter().any(|line| line.font != first.font || line.size != first.size || line.color != first.color))
                 && style.family.is_none()
@@ -2258,6 +2441,17 @@ mod tests {
         assert_eq!(wrap("A\u{a0}B C", 3.0, width), ["A B", "C"]);
         assert_eq!(wrap("A\u{2028}B C", 3.0, width), ["A B", "C"]);
         assert_eq!(wrap(" \tA  B\r\nC ", 3.0, width), ["A B", "C"]);
+    }
+
+    #[test]
+    fn japanese_text_wraps_between_characters_but_not_before_closing_marks() {
+        let width = |s: &str| s.chars().count() as f64;
+        assert_eq!(wrap("日本語の文章です。", 3.0, width), ["日本語", "の文章", "です。"]);
+        // The comma can't begin a row, so the character before it moves down with it.
+        assert_eq!(wrap("あいう、えお", 3.0, width), ["あい", "う、え", "お"]);
+        // Pieces of one word join without a space; separate words keep theirs.
+        assert_eq!(wrap("Edit PDFを編集", 6.0, width), ["Edit", "PDFを編集"]);
+        assert_eq!(wrap("一行目　二行目", 4.0, width), ["一行目　", "二行目"]);
     }
 
     #[test]

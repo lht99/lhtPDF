@@ -331,8 +331,9 @@ pub(super) fn rewrite_styled_block(
     if !dx.is_finite() || !dy.is_finite() || style.width.is_some_and(|w| !w.is_finite()) {
         return Err(EditError::Invalid("the paragraph's position and width must be finite".into()));
     }
-    // A rewritten OCR line grows to the right rather than wrapping onto the scanned line below.
-    let natural = if block.invisible {
+    // A visual row grows even when it contains several source/font runs. Multi-row
+    // paragraphs retain their container width; an explicit width always wins.
+    let natural = if block.invisible || block.rows.len() == 1 {
         (p.crop(doc)[2] - 36.0 - (block.rect[0] + dx)).max(block.rect[2] - block.rect[0])
     } else {
         block.rect[2] - block.rect[0]
@@ -343,6 +344,7 @@ pub(super) fn rewrite_styled_block(
     let mut substituted = None;
     let mut fallback_names: std::collections::BTreeMap<(String, char), String> = std::collections::BTreeMap::new();
     let mut full_faces: HashMap<String, String> = HashMap::new();
+    let mut programs: HashMap<String, Option<std::sync::Arc<Vec<u8>>>> = HashMap::new();
     for (range, index) in styled_spans {
         let source = lines.get(index).unwrap_or(first);
         for ch in draft.get(range).unwrap_or_default().chars() {
@@ -374,6 +376,28 @@ pub(super) fn rewrite_styled_block(
                         .get(name.as_bytes())
                         .and_then(|f| doc.dict(f))
                         .ok_or_else(|| EditError::Invalid("the full source font could not be loaded".into()))?;
+                    metrics.insert(name.clone(), Metrics::from_dict(doc, &font));
+                    full_faces.insert(key, name.clone());
+                    name
+                }
+            } else if let Some(bytes) = programs
+                .entry(source.font.clone())
+                .or_insert_with(|| source_program(doc, &fonts, &source.font).map(std::sync::Arc::new))
+                .clone()
+                .filter(|bytes| pdfcraft_fonts::embedding::covers(bytes, &s))
+            {
+                // The document's own complete program of this font has the glyph: draw it with
+                // that face rather than another family's fallback.
+                let key = format!("source {}", source.font);
+                if let Some(name) = full_faces.get(&key) {
+                    name.clone()
+                } else {
+                    let family = pdfcraft_fonts::embedding::names(&bytes).map_or_else(|_| source.base_font.clone(), |(family, _)| family);
+                    let name = pdfcraft_fonts::embedding::embed(doc, &mut fonts, &bytes, &family).map_err(EditError::Invalid)?;
+                    let font = fonts
+                        .get(name.as_bytes())
+                        .and_then(|f| doc.dict(f))
+                        .ok_or_else(|| EditError::Invalid("the source font could not be loaded".into()))?;
                     metrics.insert(name.clone(), Metrics::from_dict(doc, &font));
                     full_faces.insert(key, name.clone());
                     name
@@ -502,7 +526,11 @@ pub(super) fn rewrite_styled_block(
         }
         let mut end = at + 1;
         if !item.0.is_whitespace() {
-            while chars.get(end).is_some_and(|c| !c.0.is_whitespace()) {
+            // A word ends at a space, or where Chinese or Japanese text may break between characters.
+            while let (Some(before), Some(c)) = (chars.get(end - 1), chars.get(end))
+                && !c.0.is_whitespace()
+                && !crate::linebreak::between(before.0, c.0)
+            {
                 end += 1;
             }
         }

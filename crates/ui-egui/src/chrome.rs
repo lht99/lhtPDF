@@ -227,6 +227,15 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                         });
                     });
                     let max = (out.content_size.x - out.inner_rect.width()).max(0.0);
+                    if std::env::var_os("PDFCRAFT_DEBUG_TAB_SCROLL").is_some() {
+                        eprintln!(
+                            "TAB_SCROLL_STATE tabs_width={tabs_width:.1} inner_width={:.1} content_width={:.1} offset={:.1} max={max:.1} overflow={overflow} active={:?}",
+                            out.inner_rect.width(),
+                            out.content_size.x,
+                            out.state.offset.x,
+                            app.active,
+                        );
+                    }
                     ui.data_mut(|d| d.insert_temp(scroll_id, (out.state.offset.x, max)));
                     // A tab dragged to either edge of a strip that scrolls brings the hidden tabs in.
                     if let Some(x) = drag_x
@@ -268,6 +277,34 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                         });
                         ui.add_space(window_controls::SIDE_GAP - 4.0);
                     }
+                    // Interface language: immediately to the right of the theme button.
+                    // This toolbar uses right-to-left layout, so this control comes first.
+                    let selected_language = match app.language.as_str() {
+                        "vi" => "VI",
+                        "en" => "EN",
+                        _ => crate::i18n::Lang::from_pref(&app.language).code(),
+                    };
+                    ui.menu_button(selected_language, |ui| {
+                        for language in crate::i18n::Lang::all() {
+                            if !matches!(language.code(), "en" | "vi") {
+                                continue;
+                            }
+                            if ui.selectable_label(app.language == language.code(), language.name()).clicked() {
+                                let code = language.code();
+                                match crate::language_registry::write(code) {
+                                    Ok(()) => {
+                                        if let Err(error) = app.set_option("language", code) {
+                                            app.notify(error);
+                                        } else {
+                                            crate::i18n::set_current(crate::i18n::Lang::from_pref(&app.language));
+                                        }
+                                    }
+                                    Err(error) => app.notify(format!("Could not save interface language: {error}")),
+                                }
+                                ui.close();
+                            }
+                        }
+                    }).response.on_hover_text(tl!("Interface language"));
                     let (icon, label) = match app.theme_preference {
                         ThemePreference::System => ("monitor", tl!("Use system setting")),
                         ThemePreference::Light => ("sun", tl!("Light gray")),

@@ -24,6 +24,7 @@ pub struct Link {
 
 /// lhtPDF support website and attribution to the original open-source project.
 pub const LINKS: &[Link] = &[
+    Link { command: "help.app_page", label: "lhtPDF Website & Support", url: APP_PAGE, icon: "globe" },
     Link { command: "help.website", label: "lhtPDF Website & Support", url: WEBSITE, icon: "globe" },
     Link { command: "help.github", label: "Original PdfCraft Source", url: GITHUB, icon: "code-xml" },
 ];

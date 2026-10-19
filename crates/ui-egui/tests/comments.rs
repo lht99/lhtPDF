@@ -146,7 +146,7 @@ fn the_quick_bar_colour_changes_the_selected_arrow() {
 
     // Arrows are saved as Line annotations; the Arrow tool's colour must still reach them.
     let mut h = harness(|app| app.set_option("quick", "arrow").unwrap());
-    drag_pt(&mut h, (20.0, 20.0), (120.0, 30.0));
+    drag_pt(&mut h, (20.0, 70.0), (120.0, 80.0));
     assert_eq!(comments(&h)[0].subtype, "Line");
     assert_eq!(h.state().quick_tool, QuickTool::Comment(CommentTool::Arrow), "the arrow tool is still active");
     assert_eq!(h.state().views[0].comments.selected, Some((0, 0)), "the new arrow is selected");
@@ -288,7 +288,7 @@ fn shapes_and_ink_are_drawn_by_dragging() {
     h.state_mut().set_option("quick", "ink").unwrap();
     drag_pt(&mut h, (160.0, 100.0), (260.0, 40.0));
     h.state_mut().set_option("quick", "arrow").unwrap();
-    drag_pt(&mut h, (20.0, 20.0), (120.0, 30.0));
+    drag_pt(&mut h, (20.0, 70.0), (120.0, 80.0));
     // A click with a drawing tool draws nothing.
     h.state_mut().set_option("quick", "circle").unwrap();
     click_pt(&mut h, (200.0, 180.0));
@@ -353,7 +353,7 @@ fn comments_are_selected_moved_and_deleted_with_the_select_tool() {
     drag_pt(&mut h, (40.0, 100.0), (140.0, 40.0));
     h.state_mut().set_option("quick", "select").unwrap();
     // Click away, then on the rectangle's border area.
-    click_pt(&mut h, (250.0, 20.0));
+    click_pt(&mut h, (250.0, 70.0));
     assert_eq!(h.state().views[0].comments.selected, None);
     click_pt(&mut h, (90.0, 70.0));
     assert_eq!(h.state().views[0].comments.selected, Some((0, 0)));
@@ -401,27 +401,38 @@ fn panel_width(h: &Harness<'static, PdfCraftApp>) -> f32 {
 
 #[test]
 fn the_panel_keeps_its_width_with_a_reply_box_open() {
-    // The reply row reserved 48 px for "Post"; Russian's wider button overflowed it, and a
-    // resizable panel keeps the width its content used, so every repaint widened the panel.
-    let mut h = harness(|app| app.set_option("panel", "comments").unwrap());
-    field(&h, "Add a comment").click();
-    h.run_steps(2);
-    field(&h, "Add a comment").type_text("General remark");
-    h.run_steps(1);
-    h.key_press(egui::Key::Enter);
-    h.run_steps(3);
-    field(&h, "Add a reply").click(); // the new comment is selected
-    h.run_steps(2);
-    field(&h, "Add a reply").type_text("Agreed");
-    h.run_steps(1);
-    h.state_mut().set_option("language", "ru").unwrap();
-    h.run_steps(3);
-    let before = panel_width(&h);
-    h.get_by_label("Опубликовать").hover();
-    for _ in 0..30 {
+    // Exercise every language actually supported by this build.
+    // The reply composer must never make the resizable panel grow on repaint.
+    for language in pdfcraft_ui_egui::i18n::Lang::all() {
+        let mut h = harness(|app| app.set_option("panel", "comments").unwrap());
+
+        field(&h, "Add a comment").click();
+        h.run_steps(2);
+        field(&h, "Add a comment").type_text("General remark");
         h.run_steps(1);
+        h.key_press(egui::Key::Enter);
+        h.run_steps(3);
+
+        field(&h, "Add a reply").click();
+        h.run_steps(2);
+        field(&h, "Add a reply").type_text("Agreed");
+        h.run_steps(1);
+
+        h.state_mut().set_option("language", language.code()).unwrap();
+        h.run_steps(3);
+
+        let before = panel_width(&h);
+
+        for _ in 0..30 {
+            h.run_steps(1);
+            assert_eq!(
+                panel_width(&h),
+                before,
+                "Comments panel width changed in language {}",
+                language.code()
+            );
+        }
     }
-    assert_eq!(panel_width(&h), before, "the Comments panel drifted wider");
 }
 
 #[test]
@@ -645,7 +656,7 @@ fn comments_take_checkmarks_lock_hide_and_summarize() {
 fn polygons_clouds_connected_lines_callouts_and_inserted_text() {
     let mut h = harness(|app| app.set_option("quick", "polygon").unwrap());
     // Polygon: click the corners, Enter finishes.
-    for p in [(40.0, 40.0), (120.0, 40.0), (80.0, 110.0)] {
+    for p in [(40.0, 70.0), (120.0, 70.0), (80.0, 110.0)] {
         click_pt(&mut h, p);
     }
     assert_eq!(comments(&h).len(), 0, "still drawing");
@@ -657,7 +668,7 @@ fn polygons_clouds_connected_lines_callouts_and_inserted_text() {
 
     // Cloud: clicking the first point again closes it.
     h.state_mut().set_option("quick", "cloud").unwrap();
-    for p in [(160.0, 40.0), (260.0, 40.0), (260.0, 100.0), (160.0, 100.0), (160.0, 40.0)] {
+    for p in [(160.0, 70.0), (260.0, 70.0), (260.0, 120.0), (160.0, 120.0), (160.0, 70.0)] {
         click_pt(&mut h, p);
     }
     assert_eq!(comments(&h).len(), 2);

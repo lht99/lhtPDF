@@ -80,6 +80,11 @@ transparent margin is not scored as black.
 
 `cargo xtask render-oracle` drives it over the corpus. It reports; it does not gate.
 
+**Poppler is not a usable oracle for JBIG2.** The 96 `bitmap-*.pdf` corpus fixtures encode one
+picture through every corner of the format, so a correct decoder renders them all identically. We
+render 1 distinct image across all 96; Poppler renders 8, drawing a blank page for seven of them.
+`crates/render/tests/jbig2_invariants.rs` pins that invariant, and needs no oracle to do it.
+
 ## Still to do
 
 - Acrobat itself as the reference, rather than other open renderers.

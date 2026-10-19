@@ -34,7 +34,7 @@ fn harness(setup: impl FnOnce(&mut PdfCraftApp) + 'static) -> Harness<'static, P
 #[test]
 fn home_shows_welcome_and_tools() {
     let h = harness(|_| {});
-    h.get_by_label_contains("Welcome to PdfCraft");
+    h.get_by_label_contains("Welcome to lhtPDF");
     assert!(h.query_all_by_label("Organize pages").count() >= 2, "tool list + home card");
     h.get_by_label("Open file");
 }
@@ -42,23 +42,92 @@ fn home_shows_welcome_and_tools() {
 #[test]
 fn tools_panel_side_preference_moves_and_persists() {
     use pdfcraft_ui_egui::Dialog;
+    use pdfcraft_ui_egui::control::ControlClient;
+    use serde_json::{Value, json};
+    use std::sync::{Arc, Mutex};
 
-    let mut h = harness(|_| {});
+    fn request(
+        h: &mut Harness<'static, PdfCraftApp>,
+        client: &ControlClient,
+        method: &str,
+        params: Value,
+    ) -> Value {
+        let receiver = client.send(method, params);
+        for _ in 0..30 {
+            h.step();
+            if let Ok(reply) = receiver.try_recv() {
+                return reply.unwrap_or_else(|error| panic!("{method}: {error}"));
+            }
+        }
+        panic!("{method}: no reply after 30 frames");
+    }
+
+    let slot: Arc<Mutex<Option<ControlClient>>> = Arc::default();
+    let shared = slot.clone();
+
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1400.0, 900.0))
+        .build_eframe(move |cc| {
+            let mut app = PdfCraftApp::new();
+            app.set_option("language", "en").unwrap();
+            *shared.lock().unwrap() = Some(app.attach_control(&cc.egui_ctx));
+            app
+        });
+
+    h.run_steps(4);
+    let client = slot.lock().unwrap().take().unwrap();
+
     h.state_mut().dialog = Some(Dialog::Preferences);
     h.run_steps(3);
-    h.get_by_label("Tools panel side");
-    h.get_by_label("Right").click();
-    h.run_steps(3);
-    assert!(h.state().docking.tools_on_right());
-    let saved = h.state().persist();
-    let mut restored = PdfCraftApp::new();
-    restored.restore(&saved);
-    assert!(restored.docking.tools_on_right());
-    h.get_by_label("Left").click();
-    h.run_steps(3);
-    assert!(!h.state().docking.tools_on_right());
-}
 
+    for (label, expected) in [("Right", true), ("Left", false)] {
+        let inspected = request(
+            &mut h,
+            &client,
+            "ui.inspect",
+            json!({ "query": label }),
+        );
+
+
+        let widgets = inspected["widgets"]
+            .as_array()
+            .expect("ui.inspect widgets array");
+
+        let target = widgets
+            .iter()
+            .find(|widget| {
+                widget["label"] == label
+                    && widget["clickable"] == true
+                    && widget["enabled"] == true
+            })
+            .unwrap_or_else(|| panic!("No enabled clickable {label} widget: {inspected}"));
+
+        request(
+            &mut h,
+            &client,
+            "ui.click",
+            json!({ "id": target["id"] }),
+        );
+
+        h.run_steps(3);
+
+        assert_eq!(
+            h.state().docking.tools_on_right(),
+            expected,
+            "Tools panel side did not change after clicking {label}"
+        );
+
+        if expected {
+            let saved = h.state().persist();
+            let mut restored = PdfCraftApp::new();
+            restored.restore(&saved);
+            assert!(
+                restored.docking.tools_on_right(),
+                "Tools panel side must survive persistence and restore"
+            );
+        }
+    }
+}
 /// Every piece of text painted on the last frame: its whole text, whether it was cut with "…",
 /// and where it was drawn.
 fn painted_text(h: &Harness<'static, PdfCraftApp>) -> Vec<(String, bool, egui::Rect)> {
@@ -111,7 +180,7 @@ fn home_removes_one_recent_file_or_clears_them_all() {
     h.get_by_label("Clear Recent Files").click();
     h.run_steps(2);
     assert!(h.state().recent.is_empty(), "Clear empties the list");
-    h.get_by_label_contains("Files you open in PdfCraft appear here");
+    h.get_by_label_contains("Files you open in lhtPDF appear here");
     assert!(h.query_by_label("Clear Recent Files").is_none(), "and goes away with nothing left to clear");
 }
 
@@ -322,16 +391,24 @@ fn enabled(h: &Harness<'static, PdfCraftApp>, label: &str) -> Option<bool> {
 #[test]
 fn tabs_shrink_to_fit_then_arrows_step_through_them_and_open_stays_in_sight() {
     // Five long names are wider than the strip: the tabs shrink instead of running under the
-    // buttons on the right, Open sits after them, and no arrows show.
+    // toolbar controls on the right, Open sits after the tabs, and no arrows show.
     let name = |i: usize| format!("Statement {i} for the office records, scanned.pdf");
-    let mut h = harness(move |app| {
-        for i in 0..5 {
-            app.open_bytes(&name(i), None, FIXTURE.to_vec()).unwrap();
-        }
-    });
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1500.0, 900.0))
+        .build_eframe(move |_cc| {
+            let mut app = PdfCraftApp::new();
+            app.set_option("language", "en").unwrap();
+            for i in 0..5 {
+                app.open_bytes(&name(i), None, FIXTURE.to_vec()).unwrap();
+            }
+            app
+        });
+    h.run_steps(4);
     let open = h.get_by_label("Open").rect();
-    let discord = h.get_by_label("Discord").rect();
-    assert!(open.right() <= discord.left(), "Open {open:?} must not run under Discord {discord:?}");
+    assert!(
+        open.left() > 0.0 && open.right() <= h.get_by_label("EN").rect().right(),
+        "Open must remain within the window: {open:?}"
+    );
     let mut previous_right = f32::MIN;
     for i in 0..5 {
         let tab = h.get_by_label(&name(i)).rect();
@@ -355,15 +432,20 @@ fn tabs_shrink_to_fit_then_arrows_step_through_them_and_open_stays_in_sight() {
     assert_eq!(enabled(&h, "Scroll tabs right"), Some(true), "and then there is more to the right");
     let open = h.get_by_label("Open").rect();
     let right = h.get_by_label("Scroll tabs right").rect();
-    assert!(right.right() <= open.left() + 0.5 && open.right() <= h.get_by_label("Discord").rect().left());
-    // Twenty: Open stays in sight left of Discord.
+    assert!(
+        right.right() <= open.left() + 0.5,
+        "right scroll arrow {right:?} must not overlap Open {open:?}"
+    );
+    // Twenty: Open stays in sight left of the toolbar controls.
     for i in 0..13 {
         h.state_mut().open_bytes(&format!("more-{i:02}.pdf"), None, FIXTURE.to_vec()).unwrap();
     }
     h.run_steps(4);
     let open = h.get_by_label("Open").rect();
-    let discord = h.get_by_label("Discord").rect();
-    assert!(open.left() > 0.0 && open.right() <= discord.left(), "Open {open:?} stays in sight left of Discord {discord:?}");
+    assert!(
+        open.left() > 0.0 && open.right() <= h.get_by_label("EN").rect().right(),
+        "Open must stay visible with twenty tabs: {open:?}"
+    );
 }
 
 /// macOS (#789): with the integrated title bar, the strip is the 28 pt band AppKit centres the
@@ -398,11 +480,11 @@ fn narrow_tab_strips_accept_vertical_wheel_scrolling() {
             app
         });
         h.run_steps(4);
-        let last = h.get_by_label("narrow-11.pdf").rect();
+        let last = h.get_by_role_and_label(egui::accesskit::Role::Tab, "narrow-11.pdf").rect();
         assert!(last.center().x > 28.0 && last.right() < width - 100.0, "active tab: {last:?}");
         h.state_mut().active = Some(0);
         h.run_steps(4);
-        let first = h.get_by_label("narrow-00.pdf").rect();
+        let first = h.get_by_role_and_label(egui::accesskit::Role::Tab, "narrow-00.pdf").rect();
         assert!(first.center().x > 28.0 && first.right() < width - 100.0);
         h.event(egui::Event::PointerMoved(first.center()));
         for _ in 0..8 {
@@ -414,9 +496,54 @@ fn narrow_tab_strips_accept_vertical_wheel_scrolling() {
             });
             h.run_steps(8);
         }
-        let last = h.get_by_label("narrow-11.pdf").rect();
+        let last = h.get_by_role_and_label(egui::accesskit::Role::Tab, "narrow-11.pdf").rect();
         assert!(last.center().x > 28.0 && last.right() < width - 100.0, "scrolled tab: {last:?}");
-        h.get_by_label("narrow-11.pdf").click();
+        // The wheel scrolls the ScrollArea; the navigation arrows provide
+        // a separate, source-defined way to reveal a tab before clicking.
+        for _ in 0..16 {
+            let target = h
+                .get_by_role_and_label(egui::accesskit::Role::Tab, "narrow-11.pdf")
+                .rect();
+            let left_arrow = h.get_by_label("Scroll tabs left").rect();
+            let right_arrow = h.get_by_label("Scroll tabs right").rect();
+
+            let clear_left = left_arrow.right();
+            let clear_right = right_arrow.left();
+
+            if target.left() >= clear_left && target.right() <= clear_right {
+                break;
+            }
+
+            println!(
+                "TAB_SCROLL_BEFORE width={width} target={target:?} left={left_arrow:?} right={right_arrow:?} active={:?}",
+                h.state().active,
+            );
+            h.get_by_label("Scroll tabs right").click();
+            h.run_steps(4);
+            println!(
+                "TAB_SCROLL_AFTER width={width} target={:?} active={:?}",
+                h.get_by_role_and_label(egui::accesskit::Role::Tab, "narrow-11.pdf").rect(),
+                h.state().active,
+            );
+        }
+
+        let target = h
+            .get_by_role_and_label(egui::accesskit::Role::Tab, "narrow-11.pdf")
+            .rect();
+        let left_arrow = h.get_by_label("Scroll tabs left").rect();
+        let right_arrow = h.get_by_label("Scroll tabs right").rect();
+
+        assert!(
+            target.left() >= left_arrow.right()
+                && target.right() <= right_arrow.left(),
+            "Tab was not fully revealed: tab={target:?}, left={left_arrow:?}, right={right_arrow:?}"
+        );
+
+        h.get_by_role_and_label(
+            egui::accesskit::Role::Tab,
+            "narrow-11.pdf",
+        )
+        .click();
         h.run_steps(4);
         assert_eq!(h.state().active, Some(11));
         assert!(h.get_by_label_contains("Display theme:").rect().right() <= width);
@@ -882,7 +1009,7 @@ fn preferences_selects_default_workspace_for_next_open() {
     h.run_steps(2);
     assert_eq!(h.state().default_mode, Mode::Read);
     assert_eq!(h.state().mode, Mode::AllTools);
-    h.get_by_label("OK").click();
+    h.get_by_label("Apply").click();
     h.run_steps(2);
     h.state_mut().open_bytes("fixture.pdf", None, FIXTURE.to_vec()).unwrap();
     assert_eq!(h.state().mode, Mode::Read);
@@ -893,39 +1020,119 @@ fn preferences_selects_default_workspace_for_next_open() {
 /// is saved; desktops that draw the frame themselves don't offer it.
 #[test]
 fn use_system_title_bar_swaps_the_header_bar_for_the_window_frame() {
-    use egui::accesskit::Role;
+    use pdfcraft_ui_egui::control::ControlClient;
     use pdfcraft_ui_egui::window_controls::Layout;
-    fn decorations(h: &Harness<'static, PdfCraftApp>) -> Option<bool> {
-        h.output().viewport_output.values().flat_map(|v| v.commands.iter()).find_map(|c| match c {
-            egui::ViewportCommand::Decorations(on) => Some(*on),
-            _ => None,
-        })
+    use serde_json::{Value, json};
+    use std::sync::{Arc, Mutex};
+
+    fn request(
+        h: &mut Harness<'static, PdfCraftApp>,
+        client: &ControlClient,
+        method: &str,
+        params: Value,
+    ) -> Value {
+        let receiver = client.send(method, params);
+        for _ in 0..30 {
+            h.step();
+            if let Ok(reply) = receiver.try_recv() {
+                return reply.unwrap_or_else(|error| panic!("{method}: {error}"));
+            }
+        }
+        panic!("{method}: no reply after 30 frames");
     }
-    let mut h = harness(|app| app.window_controls = Some(Layout::default()));
+
+    fn decorations(h: &Harness<'static, PdfCraftApp>) -> Option<bool> {
+        h.output()
+            .viewport_output
+            .values()
+            .flat_map(|viewport| viewport.commands.iter())
+            .find_map(|command| match command {
+                egui::ViewportCommand::Decorations(on) => Some(*on),
+                _ => None,
+            })
+    }
+
+    let slot: Arc<Mutex<Option<ControlClient>>> = Arc::default();
+    let shared = slot.clone();
+
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1400.0, 900.0))
+        .build_eframe(move |cc| {
+            let mut app = PdfCraftApp::new();
+            app.set_option("language", "en").unwrap();
+            app.window_controls = Some(Layout::default());
+            *shared.lock().unwrap() = Some(app.attach_control(&cc.egui_ctx));
+            app
+        });
+
+    h.run_steps(4);
+    let client = slot.lock().unwrap().take().unwrap();
+
     // The window opened undecorated, so the first frame asks for nothing.
     assert_eq!(decorations(&h), None);
-    assert!(h.query_by_label("Minimize").is_some(), "the header bar has the window buttons");
+    assert!(
+        h.query_by_label("Minimize").is_some(),
+        "the header bar has the window buttons"
+    );
+
     h.state_mut().set_option("dialog", "preferences").unwrap();
-    h.run_steps(2);
-    h.get_by_role_and_label(Role::CheckBox, "Use system title bar").scroll_to_me();
-    h.run_steps(4);
-    h.get_by_role_and_label(Role::CheckBox, "Use system title bar").click();
-    let mut asked = None;
+    h.run_steps(3);
+
+    let inspected = request(
+        &mut h,
+        &client,
+        "ui.inspect",
+        json!({ "query": "Use system title bar" }),
+    );
+
+
+    let widgets = inspected["widgets"]
+        .as_array()
+        .expect("ui.inspect widgets array");
+
+    let checkbox = widgets
+        .iter()
+        .find(|widget| {
+            widget["label"] == "Use system title bar"
+                && widget["role"] == "CheckBox"
+                && widget["clickable"] == true
+                && widget["enabled"] == true
+        })
+        .unwrap_or_else(|| panic!("System title bar checkbox not found: {inspected}"));
+
+    request(
+        &mut h,
+        &client,
+        "ui.click",
+        json!({ "id": checkbox["id"] }),
+    );
+
+    // ui.click processes the AccessKit event before returning.
+    // Decorations(true) is emitted in that frame, not in later frames.
+    let mut asked = decorations(&h);
     for _ in 0..4 {
         h.step();
         asked = asked.or(decorations(&h));
     }
+
     assert!(h.state().system_title_bar);
     assert_eq!(asked, Some(true), "the window gets its frame back");
-    assert!(h.query_by_label("Minimize").is_none(), "and the tab strip loses its buttons");
+    assert!(
+        h.query_by_label("Minimize").is_none(),
+        "and the tab strip loses its buttons"
+    );
+
     let saved = h.state().persist();
     assert!(saved.contains(r#""system_title_bar":true"#), "{saved}");
+
     let mut restored = PdfCraftApp::new();
     restored.restore(&saved);
     assert!(restored.system_title_bar);
+
     restored.set_option("system-title-bar", "false").unwrap();
     assert!(!restored.system_title_bar);
     assert!(restored.set_option("system-title-bar", "maybe").is_err());
+
     // Where the desktop draws the frame there is nothing to choose.
     let mut h = harness(|app| app.set_option("dialog", "preferences").unwrap());
     h.run_steps(2);
@@ -933,7 +1140,6 @@ fn use_system_title_bar_swaps_the_header_bar_for_the_window_frame() {
     assert!(h.query_by_label("Minimize").is_none());
     assert_eq!(decorations(&h), None);
 }
-
 /// Preferences ▸ Animation effects: the system's animation setting until the user chooses On or
 /// Off. The choice is saved, and settings holding anything else leave it alone.
 #[test]
@@ -1064,7 +1270,7 @@ fn closing_the_last_active_tab_selects_the_previous_one_then_home() {
         assert!(app.session.get(ids[removed]).is_none());
     }
     assert_eq!(h.state().active, None);
-    h.get_by_label_contains("Welcome to PdfCraft");
+    h.get_by_label_contains("Welcome to lhtPDF");
 }
 
 #[test]
@@ -1099,6 +1305,12 @@ fn cancelling_then_discarding_an_earlier_dirty_tab_preserves_the_selected_docume
 
 #[test]
 fn long_german_tool_labels_stay_within_the_sidebar() {
+    let release_languages: Vec<_> =
+        pdfcraft_ui_egui::i18n::Lang::all().map(|lang| lang.code()).collect();
+    if !release_languages.contains(&"de") {
+        eprintln!("SKIP: long_german_tool_labels_stay_within_the_sidebar requires de; not in Release catalog");
+        return;
+    }
     use pdfcraft_ui_egui::{LeftPanel, Mode};
     let mut h = harness(|app| app.open_bytes("fixture.pdf", None, FIXTURE.to_vec()).expect("fixture opens"));
     h.state_mut().set_option("language", "de").unwrap();

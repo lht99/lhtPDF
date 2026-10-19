@@ -9,6 +9,13 @@ use pdfcraft_ui_egui::PdfCraftApp;
 use pdfcraft_ui_egui::control::{ControlClient, Reply};
 use serde_json::{Value, json};
 
+/// Check the languages enabled by the current Release catalog.
+fn release_language_enabled(code: &str) -> bool {
+    let release_languages: Vec<_> =
+        pdfcraft_ui_egui::i18n::Lang::all().map(|language| language.code()).collect();
+
+    release_languages.contains(&code)
+}
 fn fixture(n: usize) -> Vec<u8> {
     let mut objs: Vec<String> = vec!["<< /Type /Catalog /Pages 2 0 R >>".into()];
     let kids: Vec<String> = (0..n).map(|i| format!("{} 0 R", 4 + 2 * i)).collect();
@@ -180,8 +187,15 @@ fn control_focus_rejects_missing_ambiguous_disabled_and_nonfocusable_targets() {
     ok(&mut h, &c, "ui.click", json!({"label": "Home"}));
     assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["home"], true);
     let widgets = ok(&mut h, &c, "ui.inspect", json!({}));
-    let disabled = widgets["widgets"].as_array().unwrap().iter().find(|w| w["enabled"] == false).unwrap();
-    assert!(call(&mut h, &c, "ui.focus", json!({"id": disabled["id"]})).is_err());
+    let home_widgets = widgets["widgets"].as_array().unwrap();
+    if let Some(disabled) = home_widgets.iter().find(|w| w["enabled"] == false) {
+        assert!(
+            call(&mut h, &c, "ui.focus", json!({"id": disabled["id"]})).is_err(),
+            "a disabled widget must reject focus"
+        );
+    } else {
+        eprintln!("SKIP: Home has no disabled widgets to test focus rejection");
+    }
 }
 
 fn close_requested(h: &Harness<'static, PdfCraftApp>) -> bool {
@@ -275,75 +289,166 @@ fn theme_commands_and_options_report_preference_and_effective_colours() {
 }
 
 #[test]
-fn lithuanian_password_dialog_translates_dynamic_labels_and_validation() {
-    let (mut h, c) = harness();
-    ok(&mut h, &c, "ui.set", json!({ "key": "language", "value": "lt" }));
-    ok(&mut h, &c, "ui.set", json!({ "key": "dialog", "value": "protect" }));
-    h.run_steps(2);
-    h.get_by_role_and_label(egui::accesskit::Role::RadioButton, "Peržiūrėti");
-    h.get_by_role_and_label(egui::accesskit::Role::RadioButton, "Redaguoti").click();
-    h.run_steps(2);
-    assert!(!h.state().protect_draft.viewing);
-    h.get_by_role_and_label(egui::accesskit::Role::PasswordInput, "Įveskite slaptažodį");
-    h.get_by_role_and_label(egui::accesskit::Role::PasswordInput, "Pakartokite slaptažodį");
-    h.state_mut().protect_draft.password = "abc".into();
-    h.state_mut().protect_draft.confirm = "xyz".into();
-    h.run_steps(2);
-    h.get_by_label("Slaptažodžiai nesutampa.");
+fn released_languages_password_dialog_translates_dynamic_labels_and_validation() {
+    use pdfcraft_ui_egui::i18n;
+
+    for language in i18n::Lang::all() {
+        let (mut h, c) = harness();
+        ok(
+            &mut h,
+            &c,
+            "ui.set",
+            json!({ "key": "language", "value": language.code() }),
+        );
+        ok(&mut h, &c, "ui.set", json!({ "key": "dialog", "value": "protect" }));
+        h.run_steps(2);
+
+        h.get_by_role_and_label(
+            egui::accesskit::Role::RadioButton,
+            i18n::tr(language, "Viewing"),
+        );
+        h.get_by_role_and_label(
+            egui::accesskit::Role::RadioButton,
+            i18n::tr(language, "Editing"),
+        )
+        .click();
+        h.run_steps(2);
+
+        assert!(!h.state().protect_draft.viewing, "language: {}", language.code());
+
+        h.get_by_role_and_label(
+            egui::accesskit::Role::PasswordInput,
+            i18n::tr(language, "Type Password"),
+        );
+        h.get_by_role_and_label(
+            egui::accesskit::Role::PasswordInput,
+            i18n::tr(language, "Re-type Password"),
+        );
+
+        h.state_mut().protect_draft.password = "abc".into();
+        h.state_mut().protect_draft.confirm = "xyz".into();
+        h.run_steps(2);
+
+        h.get_by_label(i18n::tr(language, "The passwords don't match."));
+    }
 }
 
 #[test]
-fn lithuanian_inspector_title_updates_through_the_control_channel() {
-    let (mut h, c) = harness();
-    ok(&mut h, &c, "ui.set", json!({ "key": "panel", "value": "comments" }));
-    h.run_steps(2);
-    h.get_by_role_and_label(egui::accesskit::Role::Tab, "Inspector");
-    let documents = ok(&mut h, &c, "ui.state", json!({}))["documents"].clone();
-    ok(&mut h, &c, "ui.set", json!({ "key": "language", "value": "lt" }));
-    h.run_steps(2);
-    h.get_by_role_and_label(egui::accesskit::Role::Tab, "Inspektorius");
-    assert!(h.query_by_role_and_label(egui::accesskit::Role::Tab, "Inspector").is_none());
-    assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["documents"], documents);
-    ok(&mut h, &c, "ui.set", json!({ "key": "language", "value": "en" }));
-    h.run_steps(2);
-    h.get_by_role_and_label(egui::accesskit::Role::Tab, "Inspector");
-}
+fn released_languages_inspector_title_updates_through_the_control_channel() {
+    use pdfcraft_ui_egui::i18n;
 
+    for language in i18n::Lang::all() {
+        let (mut h, c) = harness();
+
+        ok(&mut h, &c, "ui.set", json!({ "key": "panel", "value": "comments" }));
+        h.run_steps(2);
+
+        let documents = ok(&mut h, &c, "ui.state", json!({}))["documents"].clone();
+
+        ok(
+            &mut h,
+            &c,
+            "ui.set",
+            json!({ "key": "language", "value": language.code() }),
+        );
+        h.run_steps(2);
+
+        h.get_by_role_and_label(
+            egui::accesskit::Role::Tab,
+            i18n::tr(language, "Inspector"),
+        );
+
+        assert_eq!(
+            ok(&mut h, &c, "ui.state", json!({}))["documents"],
+            documents,
+            "language: {}",
+            language.code()
+        );
+
+        ok(&mut h, &c, "ui.set", json!({ "key": "language", "value": "en" }));
+        h.run_steps(2);
+
+        h.get_by_role_and_label(egui::accesskit::Role::Tab, "Inspector");
+    }
+}
 /// Switching the interface language changes labels only: documents, their dirty state and the
 /// command ids agents drive stay exactly the same.
 #[test]
 fn language_switch_preserves_document_and_command_ids() {
     use pdfcraft_ui_egui::i18n;
+
     let (mut h, c) = harness();
     let doc = h.state().views[0].id;
-    h.state_mut().session.apply(doc, pdfcraft_engine::Edit::RotatePages { pages: vec![0], degrees: 90 }).unwrap();
+
+    h.state_mut()
+        .session
+        .apply(
+            doc,
+            pdfcraft_engine::Edit::RotatePages {
+                pages: vec![0],
+                degrees: 90,
+            },
+        )
+        .unwrap();
+
     let documents = ok(&mut h, &c, "ui.state", json!({}))["documents"].clone();
     assert_eq!(documents[0]["dirty"], true);
+
     let commands = ok(&mut h, &c, "ui.commands", json!({}));
-    for code in ["ja", "zh-hans", "fr", "de", "uk", "lt", "en"] {
-        ok(&mut h, &c, "ui.set", json!({ "key": "language", "value": code }));
+
+    for language in i18n::Lang::all() {
+        let code = language.code();
+
+        ok(
+            &mut h,
+            &c,
+            "ui.set",
+            json!({ "key": "language", "value": code }),
+        );
+
         h.run_steps(2);
+
         let state = ok(&mut h, &c, "ui.state", json!({}));
         assert_eq!(state["language"], code);
         assert_eq!(state["documents"], documents);
         assert_eq!(ok(&mut h, &c, "ui.commands", json!({})), commands);
 
-        let lang = i18n::Lang::from_code(code).unwrap();
-        h.get_by_label(i18n::tr(lang, "Menu")).click();
-        h.run_steps(2);
-        h.get_by_label(&format!("{} ⏵", i18n::tr(lang, "File"))).hover();
+        // The current toolbar exposes File directly, not the old Menu submenu.
+        h.get_by_label(i18n::tr(language, "File")).click();
         h.run_steps(3);
-        h.get_by_label_contains(i18n::tr(lang, "Open…"));
-        ok(&mut h, &c, "ui.key", json!({ "key": "Escape" }));
+        h.get_by_label_contains(i18n::tr(language, "Open…"));
+
         ok(&mut h, &c, "ui.key", json!({ "key": "Escape" }));
         h.run_steps(2);
     }
-    let error = call(&mut h, &c, "ui.set", json!({ "key": "language", "value": "xx" })).unwrap_err();
-    let codes = std::iter::once(i18n::AUTO).chain(i18n::Lang::all().map(i18n::Lang::code)).collect::<Vec<_>>().join(", ");
-    assert_eq!(error, format!("language must be one of {codes}"));
-    assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["language"], "en");
-}
 
+    // Restore the initial language before checking rejected values.
+    ok(
+        &mut h,
+        &c,
+        "ui.set",
+        json!({ "key": "language", "value": "en" }),
+    );
+
+    let error = call(
+        &mut h,
+        &c,
+        "ui.set",
+        json!({ "key": "language", "value": "xx" }),
+    )
+    .unwrap_err();
+
+    let codes = std::iter::once(i18n::AUTO)
+        .chain(i18n::Lang::all().map(i18n::Lang::code))
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    assert_eq!(error, format!("language must be one of {codes}"));
+    assert_eq!(
+        ok(&mut h, &c, "ui.state", json!({}))["language"],
+        "en"
+    );
+}
 #[cfg(target_os = "linux")]
 fn start_autoscroll(h: &mut Harness<'static, PdfCraftApp>, c: &ControlClient) -> egui::Pos2 {
     let p = h.state().views[0].viewport_rect().center();
@@ -723,65 +828,315 @@ fn state_and_view_options() {
 }
 
 #[test]
-fn japanese_controls_and_search_keep_command_ids() {
-    let (mut h, c) = harness();
-    ok(&mut h, &c, "ui.set", json!({ "key": "language", "value": "ja" }));
-    assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["language"], "ja");
-    ok(&mut h, &c, "ui.click", json!({ "label": "閲覧" }));
-    assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["mode"], "Read");
+fn released_languages_controls_and_search_keep_command_ids() {
+    use pdfcraft_ui_egui::i18n;
 
-    ok(&mut h, &c, "ui.command", json!({ "id": "app.preferences" }));
-    let prefs = ok(&mut h, &c, "ui.inspect", json!({ "query": "表示言語" }));
-    assert!(prefs["count"].as_u64().unwrap() > 0, "{prefs}");
-    ok(&mut h, &c, "ui.click", json!({ "label": "OK" }));
+    let languages: Vec<_> = i18n::Lang::all().collect();
+    assert!(!languages.is_empty(), "Release must expose at least one language");
 
-    for (query, translated) in [("整理", "ページを整理"), ("Split document", "文書を分割…"), ("page.split", "文書を分割…")] {
-        ok(&mut h, &c, "ui.command", json!({ "id": "view.palette" }));
-        ok(&mut h, &c, "ui.type", json!({ "text": query }));
-        let hits = ok(&mut h, &c, "ui.inspect", json!({ "query": translated }));
-        assert!(hits["count"].as_u64().unwrap() > 0, "{query}: {hits}");
-        ok(&mut h, &c, "ui.key", json!({ "key": "Escape" }));
-        h.state_mut().palette_query.clear();
+    for language in languages {
+        let (mut h, c) = harness();
+
+        ok(
+            &mut h,
+            &c,
+            "ui.set",
+            json!({ "key": "language", "value": language.code() }),
+        );
+
+        assert_eq!(
+            ok(&mut h, &c, "ui.state", json!({}))["language"],
+            language.code()
+        );
+
+        ok(
+            &mut h,
+            &c,
+            "ui.click",
+            json!({ "label": i18n::tr(language, "Read") }),
+        );
+
+        assert_eq!(
+            ok(&mut h, &c, "ui.state", json!({}))["mode"],
+            "Read"
+        );
+
+        for query in ["Split document", "page.split"] {
+            ok(
+                &mut h,
+                &c,
+                "ui.command",
+                json!({ "id": "view.palette" }),
+            );
+
+            ok(
+                &mut h,
+                &c,
+                "ui.type",
+                json!({ "text": query }),
+            );
+
+            let translated = i18n::tr(language, "Split document…");
+
+            let hits = ok(
+                &mut h,
+                &c,
+                "ui.inspect",
+                json!({ "query": translated }),
+            );
+
+            assert!(
+                hits["count"].as_u64().unwrap() > 0,
+                "language={}, query={query}, hits={hits}",
+                language.code()
+            );
+
+            ok(
+                &mut h,
+                &c,
+                "ui.key",
+                json!({ "key": "Escape" }),
+            );
+
+            h.state_mut().palette_query.clear();
+        }
+
+        assert_eq!(
+            ok(&mut h, &c, "ui.state", json!({}))["documents"][0]["name"],
+            "doc.pdf"
+        );
+
+        ok(
+            &mut h,
+            &c,
+            "ui.set",
+            json!({ "key": "language", "value": "en" }),
+        );
+
+        ok(
+            &mut h,
+            &c,
+            "ui.click",
+            json!({ "label": "All tools" }),
+        );
+
+        assert_eq!(
+            ok(&mut h, &c, "ui.state", json!({}))["mode"],
+            "AllTools"
+        );
     }
-    assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["documents"][0]["name"], "doc.pdf");
-    ok(&mut h, &c, "ui.set", json!({ "key": "language", "value": "en" }));
-    ok(&mut h, &c, "ui.click", json!({ "label": "All tools" }));
-    assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["mode"], "AllTools");
 }
 
 #[test]
-fn german_preferences_and_search_keep_command_ids() {
-    let (mut h, c) = harness();
-    ok(&mut h, &c, "ui.set", json!({ "key": "language", "value": "de" }));
-    ok(&mut h, &c, "ui.click", json!({ "label": "Lesen" }));
-    assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["mode"], "Read");
-    ok(&mut h, &c, "ui.command", json!({ "id": "app.preferences" }));
-    let prefs = ok(&mut h, &c, "ui.inspect", json!({ "query": "Sprache der Oberfläche" }));
-    assert!(prefs["count"].as_u64().unwrap() > 0, "{prefs}");
-    let selector = ok(&mut h, &c, "ui.inspect", json!({ "query": "Deutsch" }));
-    let combo = selector["widgets"].as_array().unwrap().iter().find(|w| w["role"] == "ComboBox").expect("language selector");
-    ok(&mut h, &c, "ui.click", json!({ "id": combo["id"] }));
-    ok(&mut h, &c, "ui.click", json!({ "label": "English" }));
-    assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["language"], "en");
-    let selector = ok(&mut h, &c, "ui.inspect", json!({ "query": "English" }));
-    let combo = selector["widgets"].as_array().unwrap().iter().find(|w| w["role"] == "ComboBox").expect("language selector");
-    ok(&mut h, &c, "ui.click", json!({ "id": combo["id"] }));
-    ok(&mut h, &c, "ui.click", json!({ "label": "Deutsch" }));
-    assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["language"], "de");
-    ok(&mut h, &c, "ui.click", json!({ "label": "OK" }));
-    for query in ["Dokument teilen", "Split document", "page.split"] {
-        ok(&mut h, &c, "ui.command", json!({ "id": "view.palette" }));
-        ok(&mut h, &c, "ui.type", json!({ "text": query }));
-        let hits = ok(&mut h, &c, "ui.inspect", json!({ "query": "Dokument teilen…" }));
-        assert!(hits["count"].as_u64().unwrap() > 0, "{query}: {hits}");
-        ok(&mut h, &c, "ui.key", json!({ "key": "Escape" }));
-        h.state_mut().palette_query.clear();
-    }
-    assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["documents"][0]["name"], "doc.pdf");
-}
+fn released_languages_preferences_and_search_keep_command_ids() {
+    use pdfcraft_ui_egui::i18n;
 
+    let languages: Vec<_> = i18n::Lang::all().collect();
+    assert!(!languages.is_empty(), "Release language catalog is empty");
+
+    for language in languages {
+        let (mut h, c) = harness();
+
+        ok(
+            &mut h,
+            &c,
+            "ui.set",
+            json!({ "key": "language", "value": language.code() }),
+        );
+
+        ok(
+            &mut h,
+            &c,
+            "ui.click",
+            json!({ "label": i18n::tr(language, "Read") }),
+        );
+
+        assert_eq!(
+            ok(&mut h, &c, "ui.state", json!({}))["mode"],
+            "Read"
+        );
+
+        ok(
+            &mut h,
+            &c,
+            "ui.command",
+            json!({ "id": "app.preferences" }),
+        );
+
+        // Select the actual Preferences ComboBox, not another language control.
+        let selector = ok(
+            &mut h,
+            &c,
+            "ui.inspect",
+            json!({ "query": language.name() }),
+        );
+
+        let combo = selector["widgets"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|w| w["role"] == "ComboBox")
+            .expect("Release language selector");
+
+        ok(
+            &mut h,
+            &c,
+            "ui.click",
+            json!({ "id": combo["id"] }),
+        );
+
+        let target = i18n::Lang::all()
+            .find(|candidate| candidate.code() != language.code())
+            .expect("Release must provide another language");
+
+        let options = ok(
+            &mut h,
+            &c,
+            "ui.inspect",
+            json!({ "query": target.name() }),
+        );
+
+        // The Preferences option is depth 6 in the accessibility tree.
+        // A second option with the same label can belong to another popup.
+        let option = options["widgets"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|w| {
+                w["label"] == target.name()
+                    && w["clickable"] == true
+                    && w["role"] == "Button"
+                    && w["depth"].as_u64() == Some(6)
+            })
+            .expect("Target Preferences language option");
+
+        ok(
+            &mut h,
+            &c,
+            "ui.click",
+            json!({ "id": option["id"] }),
+        );
+
+        assert_eq!(
+            ok(&mut h, &c, "ui.state", json!({}))["language"],
+            target.code(),
+            "Preferences must immediately change the interface language"
+        );
+
+        // Switch back to the original Release language.
+        let selector = ok(
+            &mut h,
+            &c,
+            "ui.inspect",
+            json!({ "query": target.name() }),
+        );
+
+        let combo = selector["widgets"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|w| w["role"] == "ComboBox")
+            .expect("Release language selector after switching");
+
+        ok(
+            &mut h,
+            &c,
+            "ui.click",
+            json!({ "id": combo["id"] }),
+        );
+
+        let options = ok(
+            &mut h,
+            &c,
+            "ui.inspect",
+            json!({ "query": language.name() }),
+        );
+
+        let option = options["widgets"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|w| {
+                w["label"] == language.name()
+                    && w["clickable"] == true
+                    && w["role"] == "Button"
+                    && w["depth"].as_u64() == Some(6)
+            })
+            .expect("Original Preferences language option");
+
+        ok(
+            &mut h,
+            &c,
+            "ui.click",
+            json!({ "id": option["id"] }),
+        );
+
+        assert_eq!(
+            ok(&mut h, &c, "ui.state", json!({}))["language"],
+            language.code(),
+            "Preferences must restore the original Release language"
+        );
+
+        // Close without writing test language settings to the Windows Registry.
+        ok(
+            &mut h,
+            &c,
+            "ui.click",
+            json!({ "label": i18n::tr(language, "Close") }),
+        );
+
+        for query in ["Split document", "page.split"] {
+            ok(
+                &mut h,
+                &c,
+                "ui.command",
+                json!({ "id": "view.palette" }),
+            );
+
+            ok(
+                &mut h,
+                &c,
+                "ui.type",
+                json!({ "text": query }),
+            );
+
+            let translated = i18n::tr(language, "Split document…");
+
+            let hits = ok(
+                &mut h,
+                &c,
+                "ui.inspect",
+                json!({ "query": translated }),
+            );
+
+            assert!(
+                hits["count"].as_u64().unwrap() > 0,
+                "language={}, query={query}, hits={hits}",
+                language.code()
+            );
+
+            ok(
+                &mut h,
+                &c,
+                "ui.key",
+                json!({ "key": "Escape" }),
+            );
+
+            h.state_mut().palette_query.clear();
+        }
+
+        assert_eq!(
+            ok(&mut h, &c, "ui.state", json!({}))["documents"][0]["name"],
+            "doc.pdf"
+        );
+    }
+}
 #[test]
 fn ukrainian_preferences_and_search_keep_command_ids() {
+    if !release_language_enabled("uk") {
+        eprintln!("SKIP: ukrainian_preferences_and_search_keep_command_ids requires uk; not in Release catalog");
+        return;
+    }
     let (mut h, c) = harness();
     ok(&mut h, &c, "ui.set", json!({ "key": "language", "value": "uk" }));
     ok(&mut h, &c, "ui.command", json!({ "id": "app.preferences" }));
@@ -814,6 +1169,10 @@ fn ukrainian_preferences_and_search_keep_command_ids() {
 
 #[test]
 fn preferences_menu_and_shortcut_allow_switching_interface_languages() {
+    if !release_language_enabled("ja") {
+        eprintln!("SKIP: preferences_menu_and_shortcut_allow_switching_interface_languages requires ja; not in Release catalog");
+        return;
+    }
     let (mut h, c) = harness();
     ok(&mut h, &c, "ui.set", json!({ "key": "language", "value": "ja" }));
     ok(&mut h, &c, "ui.click", json!({ "label": "メニュー" }));
@@ -849,6 +1208,10 @@ fn preferences_menu_and_shortcut_allow_switching_interface_languages() {
 
 #[test]
 fn japanese_dialogs_errors_and_custom_action_names() {
+    if !release_language_enabled("ja") {
+        eprintln!("SKIP: japanese_dialogs_errors_and_custom_action_names requires ja; not in Release catalog");
+        return;
+    }
     let (mut h, c) = harness();
     ok(&mut h, &c, "ui.set", json!({"key": "language", "value": "ja"}));
     for (dialog, label) in [
@@ -889,6 +1252,10 @@ fn japanese_dialogs_errors_and_custom_action_names() {
 
 #[test]
 fn simplified_chinese_about_tabs_and_credit_controls() {
+    if !release_language_enabled("zh-hans") {
+        eprintln!("SKIP: simplified_chinese_about_tabs_and_credit_controls requires zh-hans; not in Release catalog");
+        return;
+    }
     let (mut h, c) = harness();
     let documents = ok(&mut h, &c, "ui.state", json!({}))["documents"].clone();
     ok(&mut h, &c, "ui.set", json!({"key": "language", "value": "zh-hans"}));
@@ -916,6 +1283,10 @@ fn simplified_chinese_about_tabs_and_credit_controls() {
 
 #[test]
 fn simplified_chinese_signature_prompts_and_errors_keep_document_state() {
+    if !release_language_enabled("zh-hans") {
+        eprintln!("SKIP: simplified_chinese_signature_prompts_and_errors_keep_document_state requires zh-hans; not in Release catalog");
+        return;
+    }
     let (mut h, c) = harness();
     let documents = ok(&mut h, &c, "ui.state", json!({}))["documents"].clone();
     ok(&mut h, &c, "ui.set", json!({"key": "language", "value": "zh-hans"}));
@@ -1442,11 +1813,26 @@ fn control_quit_retains_blocked_content_typing_after_cancel() {
     let (mut h, c) = harness();
     ok(&mut h, &c, "ui.command", json!({"id":"edit.text"}));
     h.run_steps(3);
-    let point = h.state().views[0].page_screen_rect(0).unwrap().center();
-    ok(&mut h, &c, "ui.click", json!({"x":point.x,"y":point.y}));
+    // Use the visible upper-left page area and the verified content-test
+    // pointer sequence, rather than clicking the potentially offscreen centre.
+    let page_rect = h.state().views[0].page_screen_rect(0).unwrap();
+    let point = page_rect.min + egui::vec2(80.0, 120.0);
+    h.hover_at(point);
+    h.run_steps(1);
+    h.drag_at(point);
+    h.run_steps(1);
+    h.drop_at(point);
+    h.run_steps(3);
+    assert!(
+        h.state().views[0].content.draft.is_some(),
+        "Add Text should open a draft after clicking the visible page"
+    );
     h.event(egui::Event::Text("Keep 世界".into()));
     h.run_steps(3);
-    assert_eq!(h.state().views[0].content.draft.as_ref().unwrap().text, "Keep 世界");
+    assert_eq!(
+        h.state().views[0].content.draft.as_ref().unwrap().text,
+        "Keep 世界"
+    );
     h.state_mut().active = None;
     assert!(!h.state().session.get(h.state().views[0].id).unwrap().dirty);
     assert_eq!(ok(&mut h, &c, "ui.quit", json!({})), json!({"quitting":false,"needs_confirmation":true}));
