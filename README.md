@@ -55,8 +55,8 @@ Một số chức năng phụ thuộc vào phiên bản ứng dụng và các th
 <!-- LHTPDF_DOWNLOAD_START -->
 | Tệp | Mô tả |
 | --- | --- |
-| [Tải MSI Installer](https://github.com/lht99/lhtPDF/releases/download/26.10.20/lhtPDF-26.10.20-windows-x64.msi) | Cài đặt lhtPDF trên Windows |
-| [Tải Portable ZIP](https://github.com/lht99/lhtPDF/releases/download/26.10.20/lhtPDF-26.10.20-windows-x64-portable.zip) | Giải nén và chạy ứng dụng |
+| [Tải MSI Installer](https://github.com/lht99/lhtPDF/releases/download/26.10.21/lhtPDF-26.10.21-windows-x64.msi) | Cài đặt lhtPDF trên Windows |
+| [Tải Portable ZIP](https://github.com/lht99/lhtPDF/releases/download/26.10.21/lhtPDF-26.10.21-windows-x64-portable.zip) | Giải nén và chạy ứng dụng |
 <!-- LHTPDF_DOWNLOAD_END -->
 
 ### Lưu ý Windows SmartScreen
@@ -68,6 +68,14 @@ Chỉ tải phần mềm từ kho GitHub chính thức hoặc website dự án. 
 ## Lịch sử phát hành
 
 <!-- LHTPDF_RELEASE_HISTORY_START -->
+### [26.10.21](https://github.com/lht99/lhtPDF/releases/tag/26.10.21) — 2026-10-20 (Stable)
+
+- Phiên bản lhtPDF 26.10.21 tập trung cải thiện khả năng nhập liệu, hiển thị và chỉnh sửa văn bản tiếng Việt trong tài liệu PDF.
+- Add Text: Cải thiện khả năng nhập trực tiếp tiếng Việt có dấu bằng UniKey và các bộ gõ tương thích.
+- Edit Text: Cải thiện xử lý văn bản Unicode tiếng Việt và khả năng hiển thị dấu.
+- [Tải MSI](https://github.com/lht99/lhtPDF/releases/download/26.10.21/lhtPDF-26.10.21-windows-x64.msi)
+- [Tải Portable ZIP](https://github.com/lht99/lhtPDF/releases/download/26.10.21/lhtPDF-26.10.21-windows-x64-portable.zip)
+
 ### [26.10.20](https://github.com/lht99/lhtPDF/releases/tag/26.10.20) — 2026-10-19 (Stable)
 
 - Phiên bản này tiếp tục tích hợp các cải tiến từ PdfCraft, tập trung vào chỉnh sửa văn bản, xử lý font chữ và độ ổn định của tài liệu PDF.
@@ -83,14 +91,6 @@ Chỉ tải phần mềm từ kho GitHub chính thức hoặc website dự án. 
 - Tinh chỉnh giao diện Cài đặt theo hướng gọn gàng, trực quan và thống nhất hơn.
 - [Tải MSI](https://github.com/lht99/lhtPDF/releases/download/26.10.19/lhtPDF-26.10.19-windows-x64.msi)
 - [Tải Portable ZIP](https://github.com/lht99/lhtPDF/releases/download/26.10.19/lhtPDF-26.10.19-windows-x64-portable.zip)
-
-### [26.10.17](https://github.com/lht99/lhtPDF/releases/tag/26.10.17) — 2026-10-16 (Stable)
-
-- lhtPDF is a free, open-source PDF editor for Windows.
-- Improved installation language selection and persistence.
-- Improved Vietnamese and English language handling.
-- [Tải MSI](https://github.com/lht99/lhtPDF/releases/download/26.10.17/lhtPDF-26.10.17-windows-x64.msi)
-- [Tải Portable ZIP](https://github.com/lht99/lhtPDF/releases/download/26.10.17/lhtPDF-26.10.17-windows-x64-portable.zip)
 <!-- LHTPDF_RELEASE_HISTORY_END -->
 
 ## Hướng dẫn sử dụng
