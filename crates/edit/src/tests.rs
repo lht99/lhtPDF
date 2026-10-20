@@ -835,6 +835,35 @@ fn fallback_paths(doc: &Document) -> Vec<Vec<u8>> {
 }
 
 #[test]
+fn vietnamese_fallback_roundtrips_after_save() {
+
+    let cases = [
+        "s\u{1EF1}",
+        "NGUY\u{1EC4}N TH\u{1ECA} H\u{1AF}\u{1A0}NG",
+        "\u{110}\u{1EB7}ng Tr\u{1B0}\u{1EDD}ng \u{1EEE} \u{1A1} \u{1B0}",
+    ];
+
+    for replacement in cases {
+        let mut line_doc = styled_text_page("ABCDEF+Garamond");
+        text::replace_line(&mut line_doc, 0, 0, replacement).unwrap();
+        let reopened = reopen(&line_doc);
+        assert_eq!(
+            text::text_lines(&reopened, 0).unwrap()[0].text,
+            replacement,
+            "line replacement lost Vietnamese Unicode"
+        );
+
+        let mut block_doc = styled_text_page("ABCDEF+Garamond");
+        text::replace_block(&mut block_doc, 0, 0, replacement).unwrap();
+        let reopened = reopen(&block_doc);
+        assert_eq!(
+            text::text_lines(&reopened, 0).unwrap()[0].text,
+            replacement,
+            "paragraph replacement lost Vietnamese Unicode"
+        );
+    }
+}
+#[test]
 fn japanese_line_fallback_uses_real_source_family_and_weight() {
     if without_craft_fonts("japanese_line_fallback_uses_real_source_family_and_weight") {
         return;
@@ -2463,6 +2492,47 @@ fn added_thai_text_wraps_clusters_and_survives_reopen() {
     delete_content(&mut doc, 0, 0).unwrap();
     assert!(list_added(&doc).is_empty());
     assert!(arabic_font_names(&doc, 0).is_empty());
+}
+
+#[test]
+fn added_vietnamese_text_shapes_and_survives_reopen_and_update() {
+    let mut doc = fixture();
+    let text = "sự | tiếng Việt | Trường | Nguyễn | Đặng | ễ | e\u{0302}\u{0303}";
+    let item = AddedText {
+        rect: [20.0, 100.0, 450.0, 300.0],
+        text: text.into(),
+        size: 16.0,
+        ..AddedText::default()
+    };
+
+    assert_eq!(first_undrawable(&item), None);
+    add_content(&mut doc, 0, &Content::Text(item.clone())).unwrap();
+
+    let stream = String::from_utf8_lossy(
+        &stream_bytes(&doc, &Object::Ref(list_added(&doc)[0].obj)).unwrap(),
+    )
+    .into_owned();
+    assert!(stream.contains("/ActualText"), "Unicode extraction text must be present");
+    assert!(!own(&doc, 0).is_empty(), "Vietnamese glyphs must use the shaped Type 3 font");
+
+    let reopened = reopen(&doc);
+    assert_eq!(
+        list_added(&reopened)[0].content,
+        Content::Text(AddedText { rect: super::added::text_rect(&item), ..item.clone() })
+    );
+
+    let replacement = "Đặng Thái Sơn — tiếng Việt đầy đủ dấu: ễ, ệ, ự";
+    update_content(
+        &mut doc,
+        0,
+        0,
+        &Content::Text(AddedText { text: replacement.into(), ..item.clone() }),
+    )
+    .unwrap();
+    let reopened = reopen(&doc);
+    let Content::Text(saved) = &list_added(&reopened)[0].content else { panic!() };
+    assert_eq!(saved.text, replacement);
+    assert!(!own(&reopened, 0).is_empty());
 }
 
 #[test]

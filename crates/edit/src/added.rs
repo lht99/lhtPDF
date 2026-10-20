@@ -11,7 +11,7 @@
 use std::collections::{HashMap, HashSet};
 
 use pdfcraft_cos::{Dict, Document, ObjRef, Object, PdfString, Stream};
-use pdfcraft_fonts::{GlyphError, GlyphOutline, ShapedCluster, ShapedScript, Std14, literal, shape_arabic, shape_thai, shaped_glyph, win_ansi};
+use pdfcraft_fonts::{GlyphError, GlyphOutline, ShapedCluster, ShapedScript, Std14, literal, shape_arabic, shape_thai, shape_vietnamese, shaped_glyph, win_ansi};
 use unicode_bidi::{Level, ParagraphBidiInfo};
 
 use crate::{EditError, MarkKind, check, contents, n, page_list, place_tagged};
@@ -307,6 +307,30 @@ fn is_thai(c: char) -> bool {
     matches!(u32::from(c), 0x0E00..=0x0E7F)
 }
 
+/// Vietnamese letters and combining marks that need a Unicode font rather than WinAnsi.
+fn is_vietnamese(c: char) -> bool {
+    matches!(u32::from(c),
+        0x0102..=0x0103 // Ă ă
+        | 0x0110..=0x0111 // Đ đ
+        | 0x0128..=0x0129 // Ĩ ĩ
+        | 0x0168..=0x0169 // Ũ ũ
+        | 0x01A0..=0x01A1 // Ơ ơ
+        | 0x01AF..=0x01B0 // Ư ư
+        | 0x0300..=0x0303 // combining grave, acute, circumflex, tilde
+        | 0x0306 // combining breve
+        | 0x0309 // combining hook above
+        | 0x031B // combining horn
+        | 0x0323 // combining dot below
+        | 0x1EA0..=0x1EF9 // precomposed Vietnamese letters
+    )
+}
+
+/// Characters assigned to the Be Vietnam Pro run once Vietnamese is present in a line.
+/// Keeping adjacent ASCII and Latin Extended characters in the same run avoids font-metric jumps.
+fn is_vietnamese_candidate(c: char) -> bool {
+    c.is_ascii_graphic() || c == ' ' || matches!(u32::from(c), 0x00A0..=0x024F | 0x0300..=0x036F | 0x1E00..=0x1EFF)
+}
+
 /// Arabic letters, marks, digits and punctuation: an item with any of them is shaped with the
 /// craft-fonts Arabic face.
 fn is_arabic(c: char) -> bool {
@@ -314,9 +338,18 @@ fn is_arabic(c: char) -> bool {
 }
 
 /// The first character of `t` that would be drawn as `?`: outside WinAnsiEncoding and not drawn
-/// with the craft-fonts Arabic face (#125), or Arabic that the face can't draw (or that has no
-/// face to draw it). Page-content tools refuse such text; the Add-text editor keeps it open.
+/// with a supported shaped-script face. Page-content tools refuse such text; the Add-text editor
+/// keeps it open.
 pub fn first_undrawable(t: &AddedText) -> Option<char> {
+    // When a line contains Vietnamese diacritics, its Latin runs are drawn with the bundled
+    // Be Vietnam Pro face. Validate that face's glyph coverage before creating any PDF objects.
+    if t.text.chars().any(is_vietnamese) {
+        if let Some(c) = t.text.chars().find(|c| is_vietnamese_candidate(*c) && !pdfcraft_fonts::vietnamese_has(*c)) {
+            return Some(c);
+        }
+        let rest = AddedText { text: t.text.chars().filter(|c| !is_vietnamese_candidate(*c)).collect(), ..t.clone() };
+        return first_undrawable(&rest);
+    }
     if t.text.chars().any(is_thai) {
         if let Some(c) = t.text.chars().find(|c| is_thai(*c) && !pdfcraft_fonts::thai_has(*c)) {
             return Some(c);
@@ -383,6 +416,7 @@ fn shaped_layout(t: &AddedText, line: &str, rtl: bool) -> Result<(Vec<Piece>, f6
     if line.is_empty() {
         return Ok((Vec::new(), 0.0));
     }
+    let has_vietnamese = line.chars().any(is_vietnamese);
     let base = if rtl { Level::rtl() } else { Level::ltr() };
     let info = ParagraphBidiInfo::new(line, Some(base));
     let (levels, runs) = info.visual_runs(0..line.len());
@@ -397,8 +431,12 @@ fn shaped_layout(t: &AddedText, line: &str, rtl: bool) -> Result<(Vec<Piece>, f6
         for c in text.chars().filter(|c| !is_bidi_control(*c)) {
             let script = if is_thai(c) {
                 Some(ShapedScript::Thai)
-            } else if is_arabic(c) || (run_rtl && !c.is_alphanumeric() && pdfcraft_fonts::arabic_has(c)) {
+            } else if (is_arabic(c) && pdfcraft_fonts::document_arabic_font().is_some())
+                || (run_rtl && !c.is_alphanumeric() && pdfcraft_fonts::arabic_has(c))
+            {
                 Some(ShapedScript::Arabic)
+            } else if has_vietnamese && is_vietnamese_candidate(c) {
+                Some(ShapedScript::Vietnamese)
             } else {
                 None
             };
@@ -415,6 +453,7 @@ fn shaped_layout(t: &AddedText, line: &str, rtl: bool) -> Result<(Vec<Piece>, f6
                 let shaped = match script {
                     ShapedScript::Arabic => shape_arabic(&s, run_rtl).map_err(|e| arabic_error(e, &s))?,
                     ShapedScript::Thai => shape_thai(&s).map_err(|e| thai_error(e, &s))?,
+                    ShapedScript::Vietnamese => shape_vietnamese(&s).map_err(|e| vietnamese_error(e, &s))?,
                 };
                 Piece::Shaped(shaped)
             } else if run_rtl {
@@ -460,6 +499,14 @@ fn thai_error(e: GlyphError, text: &str) -> EditError {
     })
 }
 
+fn vietnamese_error(e: GlyphError, text: &str) -> EditError {
+    EditError::Invalid(match e {
+        GlyphError::NoFont => "the bundled Be Vietnam Pro font is unavailable in this build".into(),
+        GlyphError::Missing => format!("the Vietnamese font can't show \"{text}\""),
+        GlyphError::TooComplex => "the Vietnamese glyphs are too complex; use a shorter text box".into(),
+    })
+}
+
 /// The box a text item occupies (height from its lines).
 pub fn text_rect(t: &AddedText) -> [f64; 4] {
     let r = norm(t.rect);
@@ -484,9 +531,9 @@ const GLYPHS_PER_FONT: usize = 240;
 /// its pieces in drawing order and its width at the item's size.
 type LaidLine = (String, bool, Vec<Piece>, f64);
 
-/// Draw a text item that has Arabic or Thai in it. Each line is laid out in display order; Arabic glyphs
-/// come from Type 3 fonts drawn from the craft-fonts face's outlines (no font file is embedded),
-/// with a ToUnicode map for copy and search. Other text uses the item's standard font.
+/// Draw a text item that needs script shaping or Vietnamese Unicode fallback. Each line is laid
+/// out in display order; shaped glyphs come from Type 3 fonts built from the selected face's
+/// outlines (the Vietnamese face is bundled), with ToUnicode and ActualText for copy and search. Other text uses the item's standard font.
 fn draw_shaped(doc: &mut Document, t: &AddedText, taken: &Dict, fonts: &mut Dict, out: &mut Vec<u8>) -> Result<(), EditError> {
     let laid = wrapped(t)
         .into_iter()
@@ -530,6 +577,7 @@ fn draw_laid_shaped(
                 entry.insert(outline(c.script, *id).map_err(|e| match c.script {
                     ShapedScript::Arabic => arabic_error(e, &c.text),
                     ShapedScript::Thai => thai_error(e, &c.text),
+                    ShapedScript::Vietnamese => vietnamese_error(e, &c.text),
                 })?);
             }
         }
@@ -669,6 +717,7 @@ fn type3_shaped(doc: &mut Document, clusters: &[&ShapedCluster], outlines: &Hash
             match script {
                 ShapedScript::Arabic => "Arabic",
                 ShapedScript::Thai => "Thai",
+                ShapedScript::Vietnamese => "BeVietnamPro",
             },
             |f| f.family,
         ),
@@ -720,7 +769,10 @@ fn draw(doc: &mut Document, c: &Content, view: [f64; 6], taken: &Dict, existing:
             }
             let mut fonts = Dict::new();
             fonts.set(name.clone().into_bytes(), Object::Dict(font));
-            if t.text.chars().any(is_thai) || (t.text.chars().any(is_arabic) && (pdfcraft_fonts::document_arabic_font().is_some() || !existing)) {
+            if t.text.chars().any(is_thai)
+                || t.text.chars().any(is_vietnamese)
+                || (t.text.chars().any(is_arabic) && (pdfcraft_fonts::document_arabic_font().is_some() || !existing))
+            {
                 draw_shaped(doc, t, taken, &mut fonts, &mut out)?;
                 res.set(b"Font".to_vec(), Object::Dict(fonts));
                 out.extend_from_slice(b"Q\n");

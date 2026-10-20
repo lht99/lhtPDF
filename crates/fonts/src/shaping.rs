@@ -1,4 +1,4 @@
-//! Arabic and Thai text shaping with the matching craft-fonts face and bounded glyph outlines.
+//! Arabic, Thai and Vietnamese text shaping with bundled or craft-fonts faces and bounded glyph outlines.
 
 use std::sync::OnceLock;
 
@@ -27,6 +27,8 @@ pub struct ShapedCluster {
 pub enum ShapedScript {
     Arabic,
     Thai,
+    /// Latin text shaped with the always-bundled Be Vietnam Pro face.
+    Vietnamese,
 }
 
 impl ShapedScript {
@@ -34,6 +36,7 @@ impl ShapedScript {
         match self {
             Self::Arabic => crate::document_arabic_font(),
             Self::Thai => crate::document_thai_font(),
+            Self::Vietnamese => Some(crate::document_vietnamese_font()),
         }
     }
 }
@@ -41,9 +44,11 @@ impl ShapedScript {
 fn face(script: ShapedScript) -> Option<&'static (FontRef<'static>, ShaperData)> {
     static FACE: OnceLock<Option<(FontRef<'static>, ShaperData)>> = OnceLock::new();
     static THAI: OnceLock<Option<(FontRef<'static>, ShaperData)>> = OnceLock::new();
+    static VIETNAMESE: OnceLock<Option<(FontRef<'static>, ShaperData)>> = OnceLock::new();
     let cache = match script {
         ShapedScript::Arabic => &FACE,
         ShapedScript::Thai => &THAI,
+        ShapedScript::Vietnamese => &VIETNAMESE,
     };
     cache
         .get_or_init(|| {
@@ -70,6 +75,17 @@ pub fn thai_has(c: char) -> bool {
     face(ShapedScript::Thai).is_some_and(|(font, _)| font.charmap().map(c).is_some())
 }
 
+/// Whether the bundled Be Vietnam Pro face contains `c`.
+pub fn vietnamese_has(c: char) -> bool {
+    face(ShapedScript::Vietnamese).is_some_and(|(font, _)| font.charmap().map(c).is_some())
+}
+
+/// Shape Vietnamese/Latin text using the bundled Be Vietnam Pro face. Grapheme clusters keep
+/// combining accents attached to their base character and preserve the original Unicode text.
+pub fn shape_vietnamese(text: &str) -> Result<Vec<ShapedCluster>, GlyphError> {
+    shape_script(text, false, ShapedScript::Vietnamese)
+}
+
 /// Shape Thai with grapheme clusters so Sara Am decomposition and stacked marks keep their
 /// original Unicode text exactly once, including when wrapped or copied from the saved PDF.
 pub fn shape_thai(text: &str) -> Result<Vec<ShapedCluster>, GlyphError> {
@@ -86,11 +102,13 @@ fn shape_script(text: &str, rtl: bool, kind: ShapedScript) -> Result<Vec<ShapedC
     buffer.set_script(match kind {
         ShapedScript::Arabic => script::ARABIC,
         ShapedScript::Thai => script::THAI,
+        ShapedScript::Vietnamese => script::LATIN,
     });
-    // Preserve the historical Arabic per-character mapping; Thai marks stay with their base.
+    // Preserve the historical Arabic per-character mapping; Thai and Vietnamese marks stay
+    // attached to their grapheme base so wrapping and Unicode extraction remain correct.
     buffer.set_cluster_level(match kind {
         ShapedScript::Arabic => BufferClusterLevel::Characters,
-        ShapedScript::Thai => BufferClusterLevel::MonotoneGraphemes,
+        ShapedScript::Thai | ShapedScript::Vietnamese => BufferClusterLevel::MonotoneGraphemes,
     });
     let shaped = shaper.shape(buffer, ShapeOptions::new());
     // Clusters are byte offsets into `text`; a cluster shows the characters up to the next one.
@@ -215,6 +233,32 @@ mod tests {
         assert_eq!(shape_arabic("日", true), Err(GlyphError::Missing));
         assert_eq!(arabic_glyph(u32::MAX).map(|_| ()), Err(GlyphError::Missing));
         assert!(shape_arabic("", true).unwrap().is_empty());
+    }
+}
+
+#[cfg(test)]
+mod vietnamese_tests {
+    use super::*;
+
+    #[test]
+    fn bundled_vietnamese_font_shapes_precomposed_and_decomposed_text() {
+        assert!(vietnamese_has('ễ'));
+        assert!(vietnamese_has('Đ'));
+        assert!(vietnamese_has('ư'));
+
+        for text in ["sự", "tiếng Việt", "Trường", "Nguyễn", "Đặng", "ễ", "e\u{0302}\u{0303}", "o\u{031B}"] {
+            let clusters = shape_vietnamese(text).expect(text);
+            assert_eq!(clusters.iter().map(|c| c.text.as_str()).collect::<String>(), text);
+            assert!(!clusters.is_empty());
+            for cluster in clusters {
+                assert_eq!(cluster.script, ShapedScript::Vietnamese);
+                assert!(cluster.advance.is_finite() && cluster.advance >= 0.0);
+                for (id, pos) in cluster.glyphs {
+                    assert!(pos.iter().all(|v| v.is_finite()));
+                    shaped_glyph(ShapedScript::Vietnamese, id).expect(text);
+                }
+            }
+        }
     }
 }
 

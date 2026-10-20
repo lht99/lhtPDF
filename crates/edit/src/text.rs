@@ -1389,6 +1389,23 @@ fn no_hebrew_font() -> EditError {
 /// faces for anything it lacks; other text takes the Japanese faces, as before.
 fn type3_faces(text: &str, family: crate::added::Family, bold: bool) -> Result<(Vec<&'static CraftFont>, bool), EditError> {
     let japanese = pdfcraft_fonts::document_japanese_fonts_for_style(family == crate::added::Family::Times, bold);
+    // lhtPDF: Prefer the approved Vietnamese face when it covers the entire
+    // Latin replacement. Keep Japanese and Hebrew selection unchanged.
+    let vietnamese = text.chars().any(|ch| {
+        matches!(
+            ch as u32,
+            0x0102 | 0x0103 | 0x0110 | 0x0111
+                | 0x0128 | 0x0129 | 0x0168 | 0x0169
+                | 0x01A0 | 0x01A1 | 0x01AF | 0x01B0
+                | 0x1EA0..=0x1EF9
+        )
+    });
+    if vietnamese && !text.chars().any(crate::bidi::is_hebrew) {
+        let face = pdfcraft_fonts::document_vietnamese_font();
+        if pdfcraft_fonts::embedding::covers(face.bytes, text) {
+            return Ok((std::iter::once(face).chain(japanese).collect(), false));
+        }
+    }
     if !text.chars().any(crate::bidi::is_hebrew) {
         return Ok((japanese, false));
     }

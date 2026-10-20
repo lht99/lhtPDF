@@ -2774,6 +2774,17 @@ impl eframe::App for PdfCraftApp {
     fn raw_input_hook(&mut self, ctx: &egui::Context, raw: &mut egui::RawInput) {
         // Before egui reads this frame's wheel input.
         self.scroll_speed.apply(ctx, raw);
+        // Explicitly opt in for a short, controlled keyboard/IME reproduction.
+        // WARNING: Debug events may contain typed characters. Never enable for normal use.
+        if std::env::var_os("LHTPDF_INPUT_TRACE").is_some_and(|value| value == "1")
+            && ctx.text_edit_focused()
+        {
+            for event in &raw.events {
+                if matches!(event, egui::Event::Key { .. } | egui::Event::Text(_) | egui::Event::Ime(_)) {
+                    log::warn!(target: "pdfcraft_ui_egui::input_diagnostics", "input event: {event:?}");
+                }
+            }
+        }
         if raw.hovered_files.is_empty() && raw.dropped_files.is_empty() {
             return;
         }

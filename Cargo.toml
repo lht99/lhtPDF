@@ -5,7 +5,7 @@ exclude = ["vendor"]
 default-members = ["crates/*", "apps/pdfcraft", "apps/pdfcraft-cli", "xtask"]
 
 [workspace.package]
-version = "26.10.20"
+version = "26.10.21"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 rust-version = "1.95"
@@ -17,39 +17,39 @@ craft-ui = { git = "https://github.com/storytold/craft-libs", version = "0.1.0",
 # Shared system spooler; document composition remains in pdfcraft-print.
 craft-print = { git = "https://github.com/storytold/craft-libs", version = "0.1.0", rev = "f03ec27ab2c405969428512178f746183cd55ca0" }
 # internal
-pdfcraft-geom = { path = "crates/geom", version = "26.10.20" }
-pdfcraft-filters = { path = "crates/filters", version = "26.10.20" }
-pdfcraft-cos = { path = "crates/cos", version = "26.10.20" }
-pdfcraft-crypt = { path = "crates/crypt", version = "26.10.20" }
-pdfcraft-organize = { path = "crates/organize", version = "26.10.20" }
-pdfcraft-measure = { path = "crates/measure", version = "26.10.20" }
-pdfcraft-annot = { path = "crates/annot", version = "26.10.20" }
-pdfcraft-audit = { path = "crates/audit", version = "26.10.20" }
-pdfcraft-fonts = { path = "crates/fonts", version = "26.10.20" }
-pdfcraft-model = { path = "crates/model", version = "26.10.20" }
-pdfcraft-content = { path = "crates/content", version = "26.10.20" }
-pdfcraft-redact = { path = "crates/redact", version = "26.10.20" }
-pdfcraft-print = { path = "crates/print", version = "26.10.20" }
-pdfcraft-xfdf = { path = "crates/xfdf", version = "26.10.20" }
-pdfcraft-sign = { path = "crates/sign", version = "26.10.20" }
-pdfcraft-optimize = { path = "crates/optimize", version = "26.10.20" }
-pdfcraft-a11y = { path = "crates/a11y", version = "26.10.20" }
-pdfcraft-oracle = { path = "crates/oracle", version = "26.10.20" }
-pdfcraft-testkit = { path = "crates/testkit", version = "26.10.20" }
-pdfcraft-ocr = { path = "crates/ocr", version = "26.10.20" }
-pdfcraft-js = { path = "crates/js", version = "26.10.20" }
-pdfcraft-compare = { path = "crates/compare", version = "26.10.20" }
-pdfcraft-preflight = { path = "crates/preflight", version = "26.10.20" }
-pdfcraft-export = { path = "crates/export", version = "26.10.20" }
-pdfcraft-edit = { path = "crates/edit", version = "26.10.20" }
-pdfcraft-create = { path = "crates/create", version = "26.10.20" }
-pdfcraft-forms = { path = "crates/forms", version = "26.10.20" }
-pdfcraft-xfa = { path = "crates/xfa", version = "26.10.20" }
-pdfcraft-render = { path = "crates/render", version = "26.10.20" }
-pdfcraft-engine = { path = "crates/engine", version = "26.10.20" }
-pdfcraft-platform = { path = "crates/platform", version = "26.10.20" }
-pdfcraft-ui-egui = { path = "crates/ui-egui", version = "26.10.20" }
-pdfcraft-automation = { path = "crates/automation", version = "26.10.20", default-features = false }
+pdfcraft-geom = { path = "crates/geom" }
+pdfcraft-filters = { path = "crates/filters" }
+pdfcraft-cos = { path = "crates/cos" }
+pdfcraft-crypt = { path = "crates/crypt" }
+pdfcraft-organize = { path = "crates/organize" }
+pdfcraft-measure = { path = "crates/measure" }
+pdfcraft-annot = { path = "crates/annot" }
+pdfcraft-audit = { path = "crates/audit" }
+pdfcraft-fonts = { path = "crates/fonts" }
+pdfcraft-model = { path = "crates/model" }
+pdfcraft-content = { path = "crates/content" }
+pdfcraft-redact = { path = "crates/redact" }
+pdfcraft-print = { path = "crates/print" }
+pdfcraft-xfdf = { path = "crates/xfdf" }
+pdfcraft-sign = { path = "crates/sign" }
+pdfcraft-optimize = { path = "crates/optimize" }
+pdfcraft-a11y = { path = "crates/a11y" }
+pdfcraft-oracle = { path = "crates/oracle" }
+pdfcraft-testkit = { path = "crates/testkit" }
+pdfcraft-ocr = { path = "crates/ocr" }
+pdfcraft-js = { path = "crates/js" }
+pdfcraft-compare = { path = "crates/compare" }
+pdfcraft-preflight = { path = "crates/preflight" }
+pdfcraft-export = { path = "crates/export" }
+pdfcraft-edit = { path = "crates/edit" }
+pdfcraft-create = { path = "crates/create" }
+pdfcraft-forms = { path = "crates/forms" }
+pdfcraft-xfa = { path = "crates/xfa" }
+pdfcraft-render = { path = "crates/render" }
+pdfcraft-engine = { path = "crates/engine" }
+pdfcraft-platform = { path = "crates/platform" }
+pdfcraft-ui-egui = { path = "crates/ui-egui" }
+pdfcraft-automation = { path = "crates/automation", default-features = false }
 
 # pdf
 hayro = "0.7.1"

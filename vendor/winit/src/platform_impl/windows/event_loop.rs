@@ -1135,6 +1135,27 @@ unsafe fn public_window_callback_inner(
         .catch_unwind(mods_changed_callback)
         .unwrap_or_else(|| result = ProcResult::Value(-1));
 
+    // lhtPDF diagnostic only: observe Win32 messages before winit builds KeyEvents.
+    // Never enable during normal use. Parameters may reveal typed characters.
+    if std::env::var_os("LHTPDF_WIN32_INPUT_TRACE")
+        .is_some_and(|value| value == "1")
+        && matches!(
+            msg,
+            0x0100 // WM_KEYDOWN
+                | 0x0101 // WM_KEYUP
+                | 0x0102 // WM_CHAR
+                | 0x0106 // WM_SYSCHAR
+                | 0x0109 // WM_UNICHAR
+                | 0x010D // WM_IME_STARTCOMPOSITION
+                | 0x010E // WM_IME_ENDCOMPOSITION
+                | 0x010F // WM_IME_COMPOSITION
+                | 0x0286 // WM_IME_CHAR
+        )
+    {
+        eprintln!(
+            "LHTPDF_WIN32_INPUT_TRACE msg=0x{msg:04X} wparam=0x{wparam:X} lparam=0x{lparam:X}"
+        );
+    }
     let keyboard_callback = || {
         use crate::event::WindowEvent::KeyboardInput;
         let events =
