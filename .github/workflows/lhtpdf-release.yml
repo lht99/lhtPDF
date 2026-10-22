@@ -16,7 +16,7 @@ jobs:
 
     steps:
       - name: Checkout source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Resolve release version
         id: release_version
@@ -43,7 +43,7 @@ jobs:
           )
           Write-Host "Release version: $version"
       - name: Checkout OCR fonts
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: lht99/craft-fonts
           ref: ef38d149f0a6d3b660da8c8b4d2208266e9df349
@@ -154,7 +154,7 @@ jobs:
           )
 
       - name: Upload verified build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: lhtPDF-${{ steps.release_version.outputs.version }}-windows-x64
           path: |
