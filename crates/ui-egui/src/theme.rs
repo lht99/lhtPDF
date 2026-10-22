@@ -220,7 +220,11 @@ pub const SYSTEM_FALLBACK: &str = "system-fallback";
 pub const SYSTEM_DEVANAGARI_FALLBACK: &str = "system-devanagari-fallback";
 /// The name of the installed Telugu face [`installed_font_definitions`] may add.
 pub const SYSTEM_TELUGU_FALLBACK: &str = "system-telugu-fallback";
-/// The name of the installed Korean Hangul face.
+/// The name of the installed Sinhala face [`installed_font_definitions`] may add.
+pub const SYSTEM_SINHALA_FALLBACK: &str = "system-sinhala-fallback";
+/// The name of the installed Tamil face [`installed_font_definitions`] may add.
+pub const SYSTEM_TAMIL_FALLBACK: &str = "system-tamil-fallback";
+/// The installed Korean face for Hangul file names.
 pub const SYSTEM_KOREAN_FALLBACK: &str = "system-korean-fallback";
 
 /// What [`install_fonts_for`] installs: [`font_definitions_for`], then, on desktop, one face
@@ -234,8 +238,9 @@ pub const SYSTEM_KOREAN_FALLBACK: &str = "system-korean-fallback";
 /// - Otherwise it is the last fallback of every family (an Arabic file name in a build without
 ///   craft-fonts).
 ///
-/// An installed Devanagari face and an installed Telugu face, when there are, end every family
-/// just before that one, so Hindi and Telugu text draw in a build without such faces (#1531).
+/// Installed Devanagari, Telugu, Sinhala and Tamil faces, when there are, end every family just
+/// before that one, so Hindi, Telugu (#1531), Sinhala and Tamil (#1688) text, such as a file
+/// name, draws in a build without such faces.
 ///
 /// `PDFCRAFT_SYSTEM_FONTS=0` leaves them out.
 pub fn installed_font_definitions(cjk: CjkPreference) -> FontDefinitions {
@@ -248,6 +253,9 @@ pub fn installed_font_definitions(cjk: CjkPreference) -> FontDefinitions {
         for (name, data) in [
             (SYSTEM_DEVANAGARI_FALLBACK, crate::system_fonts::devanagari_fallback()),
             (SYSTEM_TELUGU_FALLBACK, crate::system_fonts::telugu_fallback()),
+            (SYSTEM_SINHALA_FALLBACK, crate::system_fonts::sinhala_fallback()),
+            (SYSTEM_TAMIL_FALLBACK, crate::system_fonts::tamil_fallback()),
+            (SYSTEM_KOREAN_FALLBACK, crate::system_fonts::korean_fallback()),
         ] {
             let Some(data) = data else { continue };
             fonts.font_data.insert(name.to_owned(), data);
@@ -270,14 +278,6 @@ pub fn installed_font_definitions(cjk: CjkPreference) -> FontDefinitions {
                     Need::Hans | Need::Hant => stack.iter().position(|n| japanese.contains(n)),
                 };
                 stack.insert(at.unwrap_or(stack.len()), SYSTEM_FALLBACK.to_owned());
-            }
-        }
-
-        // Append Korean after the language-specific Chinese system fallback.
-        if let Some(data) = crate::system_fonts::korean_fallback() {
-            fonts.font_data.insert(SYSTEM_KOREAN_FALLBACK.to_owned(), data);
-            for stack in fonts.families.values_mut() {
-                stack.push(SYSTEM_KOREAN_FALLBACK.to_owned());
             }
         }
     }
@@ -318,6 +318,40 @@ fn primary_font_tweak(platform: FontPolicyPlatform, name: &str) -> FontTweak {
     tweak
 }
 
+/// A face's vertical metrics in em, as egui reads them: skrifa's ascent, descent (negative) and
+/// line gap at the default location. `None` when the face doesn't parse.
+fn vertical_metrics(bytes: &[u8], index: u32) -> Option<[f32; 3]> {
+    use skrifa::MetadataProvider as _;
+    let font = skrifa::FontRef::from_index(bytes, index).ok()?;
+    let m = font.metrics(skrifa::instance::Size::unscaled(), skrifa::instance::LocationRef::default());
+    let em = f32::from(m.units_per_em);
+    let metrics = [m.ascent / em, m.descent / em, m.leading / em];
+    (em > 0.0 && metrics.iter().all(|v| v.is_finite())).then_some(metrics)
+}
+
+/// How far below the primary face's baseline egui draws a fallback face's, in em of the font size
+/// (negative: above). egui centres the fallback's line box (ascent − descent + gap) on the
+/// primary's rather than lining up their baselines, so the baseline moves by half the difference
+/// of ascent + descent, less half the difference of the line gaps (epaint `text_layout`).
+fn baseline_drop(primary: [f32; 3], fallback: [f32; 3]) -> f32 {
+    let [pa, pd, pg] = primary;
+    let [a, d, g] = fallback;
+    ((a + d) - (pa + pd) + pg - g) / 2.0
+}
+
+/// `data` with its glyphs moved onto Inter's baseline (#1676). Without this, Chinese next to Latin
+/// in one label sits higher or lower than the Latin by a few percent of the font size, depending on
+/// the installed Chinese face (PingFang, Microsoft JhengHei, SimSun…). Inter is the first face of
+/// every proportional family; the monospace family's JetBrains Mono differs from it by 0.004 em,
+/// well under a pixel. A face that doesn't parse is left as it is (egui will skip it anyway).
+pub(crate) fn on_interface_baseline(mut data: FontData) -> FontData {
+    let primary = vertical_metrics(pdfcraft_fonts::INTER_REGULAR, 0);
+    if let (Some(primary), Some(fallback)) = (primary, vertical_metrics(&data.font, data.index)) {
+        data.tweak.y_offset_factor = -baseline_drop(primary, fallback);
+    }
+    data
+}
+
 fn font_definitions_for_platform(prefer_hans: bool, platform: FontPolicyPlatform) -> FontDefinitions {
     let mut fonts = FontDefinitions::default();
     let add = |fonts: &mut FontDefinitions, name: &str, bytes: &'static [u8]| {
@@ -325,7 +359,7 @@ fn font_definitions_for_platform(prefer_hans: bool, platform: FontPolicyPlatform
         let data = if ["Inter", "Inter-Medium", "Inter-SemiBold", "JetBrainsMono"].contains(&name) {
             data.tweak(primary_font_tweak(platform, name))
         } else {
-            data
+            on_interface_baseline(data)
         };
         fonts.font_data.insert(name.to_owned(), Arc::new(data));
     };
@@ -336,6 +370,9 @@ fn font_definitions_for_platform(prefer_hans: bool, platform: FontPolicyPlatform
     add(&mut fonts, "JetBrainsMono", include_bytes!("../../../assets/fonts/JetBrainsMono-Regular.ttf"));
     fonts.families.entry(FontFamily::Proportional).or_default().insert(0, "Inter".to_owned());
     fonts.families.entry(FontFamily::Monospace).or_default().insert(0, "JetBrainsMono".to_owned());
+    // Keep missing Latin/Cyrillic letters in the app's own faces (for example Bulgarian ѝ,
+    // absent from JetBrains Mono), before egui's defaults or optional system/CJK fallbacks.
+    fonts.families.entry(FontFamily::Monospace).or_default().insert(1, "Inter".to_owned());
     // The same static bytes pdfcraft-fonts uses for Japanese/Chinese text in PDFs: one copy, not two.
     for face in pdfcraft_fonts::ui_cjk_fonts(prefer_hans) {
         let name = face.name();
@@ -559,6 +596,39 @@ mod tests {
         )
     }
 
+    /// The baseline of each glyph of `text` laid out by egui at `size` points, in points from the
+    /// top of the row: its position plus its face's `y_offset_factor`, as epaint draws it.
+    fn baselines(fallback: FontData, size: f32, text: &str) -> Vec<f32> {
+        let factor = fallback.tweak.y_offset_factor;
+        let mut defs = FontDefinitions::empty();
+        defs.font_data.insert("Inter".into(), Arc::new(FontData::from_static(pdfcraft_fonts::INTER_REGULAR)));
+        defs.font_data.insert("fallback".into(), Arc::new(fallback));
+        defs.families.insert(FontFamily::Proportional, vec!["Inter".into(), "fallback".into()]);
+        let mut fonts = Fonts::new(TextOptions::default(), defs);
+        let g = galley(&mut fonts, FontFamily::Proportional, size, 1.0, text);
+        let inter_has = |c: char| c.is_ascii();
+        g.rows[0].glyphs.iter().map(|gl| gl.pos.y + if inter_has(gl.chr) { 0.0 } else { size * factor }).collect()
+    }
+
+    #[test]
+    fn fallback_faces_share_the_interface_baseline() {
+        // Dancing Script's metrics differ from Inter's the way a Chinese face's do (by 0.044 em),
+        // and it has letters Inter doesn't (Ǆ), which egui then takes from it.
+        let dancing: &'static [u8] = include_bytes!("../../../assets/fonts/DancingScript.ttf");
+        let size = 100.0;
+        // As egui lays it out by itself, Ǆ sits ~4 pt off H's baseline: the bug (#1676).
+        let raw = baselines(FontData::from_static(dancing), size, "HǄ");
+        assert!((raw[1] - raw[0]).abs() > 3.0, "the test fonts must differ: {raw:?}");
+        let drop = baseline_drop(vertical_metrics(pdfcraft_fonts::INTER_REGULAR, 0).unwrap(), vertical_metrics(dancing, 0).unwrap());
+        assert!((raw[1] - raw[0] - size * drop).abs() <= 1.0, "baseline_drop predicts egui: {raw:?} vs {drop}");
+        // On the interface baseline, to the pixel.
+        let aligned = baselines(on_interface_baseline(FontData::from_static(dancing)), size, "HǄ");
+        assert!((aligned[1] - aligned[0]).abs() <= 1.0, "{aligned:?}");
+        // A face that doesn't parse is left alone rather than guessed at.
+        assert_eq!(on_interface_baseline(FontData::from_static(b"not a font")).tweak, FontTweak::default());
+        assert_eq!(vertical_metrics(b"", 0), None);
+    }
+
     #[test]
     fn windows_hinting_changes_only_the_jetbrains_symmetric_rendering_field() {
         let baseline = font_definitions_for_platform(false, FontPolicyPlatform::Other);
@@ -690,43 +760,6 @@ mod tests {
                 for bg in [t.chrome, t.panel, t.card, t.pasteboard] {
                     let r = contrast(fg, bg);
                     assert!(r >= 4.5, "{kind:?} {name} on {bg:?}: {r:.2}:1, WCAG AA needs 4.5:1");
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn korean_filename_has_glyphs_in_all_ui_families() {
-        if !cfg!(windows) {
-            return;
-        }
-
-        let mut fonts = Fonts::new(TextOptions::default(), installed_font_definitions(CjkPreference::Default));
-
-        let filename = "\u{C548}\u{B155}\u{D558}\u{C138}\u{C694}_\u{D55C}\u{AE00}_\u{BB38}\u{C11C}.pdf";
-
-        for family in [FontFamily::Proportional, FontFamily::Monospace, FontFamily::Name("medium".into()), FontFamily::Name("semibold".into())] {
-            let id = FontId::new(16.0, family.clone());
-
-            assert!(fonts.has_glyphs(&id, filename), "Missing Korean filename glyphs in {family:?}");
-        }
-    }
-    #[test]
-    fn korean_fallback_preserves_cjk_priority() {
-        for preference in [CjkPreference::Default, CjkPreference::SimplifiedChinese, CjkPreference::TraditionalChinese] {
-            let fonts = installed_font_definitions(preference);
-
-            for family in [FontFamily::Proportional, FontFamily::Monospace, FontFamily::Name("medium".into()), FontFamily::Name("semibold".into())] {
-                let stack = &fonts.families[&family];
-
-                let Some(korean_pos) = stack.iter().position(|name| name == SYSTEM_KOREAN_FALLBACK) else {
-                    continue;
-                };
-
-                assert_eq!(korean_pos, stack.len() - 1, "Korean fallback must be last: {family:?}");
-
-                if let Some(chinese_pos) = stack.iter().position(|name| name == SYSTEM_FALLBACK) {
-                    assert!(chinese_pos < korean_pos, "Chinese/system fallback must precede Korean");
                 }
             }
         }

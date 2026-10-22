@@ -21,7 +21,7 @@
 // Release builds on Windows are GUI-subsystem programs, so launching the app doesn't open a console
 // window next to it (#57). `--version` and diagnostics then go nowhere when started from a terminal
 // (std ignores the missing console handles, so nothing fails); debug builds keep the console.
-#![cfg_attr(windows, windows_subsystem = "windows")]
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
 use std::cell::Cell;
@@ -37,6 +37,7 @@ mod logging;
 #[cfg(target_os = "windows")]
 mod motion;
 mod reopen;
+mod settings;
 mod single_instance;
 mod text_scale;
 mod updates;
@@ -50,38 +51,46 @@ const APP_ID: &str = "ai.storyteller.pdfcraft";
 /// The app icon (assets/app-icon/README.md). macOS gets the version on Apple's icon grid, with a
 /// transparent margin; Windows and Linux get the full-bleed tile.
 #[cfg(target_os = "macos")]
-const APP_ICON_PNG: &[u8] = include_bytes!("../../../assets/app-icon/pdfcraft-1024.png");
+const APP_ICON_PNG: &[u8] = include_bytes!("../../../assets/branding/lhtpdf-icon.png");
 #[cfg(not(target_os = "macos"))]
-const APP_ICON_PNG: &[u8] = include_bytes!("../../../assets/app-icon/hicolor/256x256/apps/ai.storyteller.pdfcraft.png");
+const APP_ICON_PNG: &[u8] = include_bytes!("../../../assets/branding/lhtpdf-icon.png");
 
 /// The app was called PrintCraft before; settings saved then are under this key.
 const LEGACY_STORAGE_KEY: &str = "printcraft";
 
-/// The settings folder: `app.ron` and the `logs` folder (docs/development.md). In portable mode
-/// it is `PdfCraftData` beside the executable (#157). eframe would otherwise derive it from the
-/// app id; keep it under "PdfCraft".
-/// Whether this launch has no existing saved application settings.
-/// A Portable first-run language choice must not overwrite legacy settings.
-/// The MSI's initial interface language (English or Vietnamese).
-/// Portable installations use their own first-run chooser instead.
+/// The preferences folder (`app.ron`, docs/development.md). In portable mode
+/// it is `PdfCraftData` beside the executable (#157). XDG desktops use the configuration base;
+/// other platforms retain eframe's PdfCraft folder. Logs and recovery stay in the data folder.
+/// MSI provides only a default for a user without a saved preference.
+/// Portable mode never reads the machine-wide installation language.
 #[cfg(target_os = "windows")]
 fn msi_install_language() -> Option<&'static str> {
     if pdfcraft_ui_egui::portable::data_dir().is_some() {
         return None;
     }
 
-    let output = std::process::Command::new("reg.exe").args(["query", r"HKLM\SOFTWARE\lhtPDF", "/v", "InstallLanguage", "/reg:64"]).output().ok()?;
+    let output = std::process::Command::new("reg.exe")
+        .args([
+            "query",
+            r"HKLM\SOFTWARE\lhtPDF",
+            "/v",
+            "InstallLanguage",
+            "/reg:64",
+        ])
+        .output()
+        .ok()?;
 
     if !output.status.success() {
         return None;
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-
     for line in stdout.lines() {
         let fields: Vec<_> = line.split_whitespace().collect();
-
-        if fields.len() >= 3 && fields[0].eq_ignore_ascii_case("InstallLanguage") && fields[1].eq_ignore_ascii_case("REG_SZ") {
+        if fields.len() >= 3
+            && fields[0].eq_ignore_ascii_case("InstallLanguage")
+            && fields[1].eq_ignore_ascii_case("REG_SZ")
+        {
             return match fields[2] {
                 "en" => Some("en"),
                 "vi" => Some("vi"),
@@ -92,14 +101,22 @@ fn msi_install_language() -> Option<&'static str> {
 
     None
 }
-fn is_first_run() -> bool {
-    settings_dir().map(|dir| !dir.join("app.ron").is_file()).unwrap_or(false)
-}
+
 fn settings_dir() -> Option<std::path::PathBuf> {
-    if let Some(dir) = pdfcraft_ui_egui::portable::data_dir() {
-        return Some(dir.to_path_buf());
+    let legacy = eframe::storage_dir("PdfCraft");
+    match settings::directory(
+        cfg!(all(unix, not(target_os = "macos"))),
+        pdfcraft_ui_egui::portable::data_dir(),
+        legacy.clone(),
+        std::env::var_os("XDG_CONFIG_HOME").map(std::path::PathBuf::from),
+        std::env::home_dir(),
+    ) {
+        Ok(dir) => dir,
+        Err(e) => {
+            log::warn!("could not migrate preferences to the XDG configuration folder; using the original location: {e}");
+            legacy
+        }
     }
-    eframe::storage_dir("PdfCraft")
 }
 
 /// Move the settings and crash-recovery folders of the app's former name, PrintCraft, to the new
@@ -110,7 +127,7 @@ fn migrate_legacy_folders() {
     if pdfcraft_ui_egui::portable::data_dir().is_some() {
         return;
     }
-    let mut moves = vec![(eframe::storage_dir("PrintCraft"), settings_dir())];
+    let mut moves = vec![(eframe::storage_dir("PrintCraft"), eframe::storage_dir("PdfCraft"))];
     // Recovery lives in the settings folder except on Windows, where it is under %LOCALAPPDATA%.
     if cfg!(windows) {
         let local = std::env::var_os("LOCALAPPDATA").filter(|v| !v.is_empty()).map(std::path::PathBuf::from);
@@ -251,21 +268,27 @@ fn main() -> eframe::Result {
     // GNOME on Wayland leaves the window frame to the app (src/decorations.rs).
     let window_controls = if cfg!(any(target_os = "macos", target_os = "windows")) { None } else { decorations::app_drawn() };
     migrate_legacy_folders();
-    // The log file lives in the settings folder; opened after the arguments (so `--version` leaves
+    // The log file stays in the data folder; opened after the arguments (so `--version` leaves
     // no file behind) and after the PrintCraft migration (which a fresh folder would block).
     // Records logged until now are written to it first.
-    if let (Some(logger), Some(dir)) = (logger, settings_dir()) {
+    if let (Some(logger), Some(dir)) =
+        (logger, pdfcraft_ui_egui::portable::data_dir().map(std::path::Path::to_path_buf).or_else(|| eframe::storage_dir("PdfCraft")))
+    {
         match logger.attach_dir(&dir.join("logs")) {
             Ok(path) => log::info!("PdfCraft {}, log file {}", pdfcraft_engine::build_info::version(), path.display()),
             // Standard error only by now (`attach_dir` gave up on the file); unlike `eprintln!`, never panics.
             Err(e) => log::warn!("no log file: {e}"),
         }
     }
-    // Windows: a launch that only names files (an Outlook attachment, an Explorer double-click)
-    // hands them to the PdfCraft already running and exits (#282, #317). Any option means the
-    // caller wants this launch's own window.
+    // Windows, Linux and the BSDs: a launch that only names files (an Outlook attachment, an
+    // Explorer double-click, a file manager or `xdg-open`) hands them to the PdfCraft already
+    // running and exits (#282, #317, #1726). Any option means the caller wants this launch's own
+    // window.
     let may_hand_off = !new_window && !files.is_empty() && options.is_empty() && control_file.is_none() && !create_images;
-    let instance = match single_instance::claim(&single_instance::absolute(&files), may_hand_off) {
+    // Absolute for this instance too: links relative to a document resolve against its folder,
+    // never the working directory.
+    let files = single_instance::absolute(&files);
+    let instance = match single_instance::claim(&files, may_hand_off) {
         single_instance::Claim::HandedOff => return Ok(()),
         single_instance::Claim::Primary(server) => Some(server),
         single_instance::Claim::Alone => None,
@@ -380,6 +403,18 @@ struct Launch {
     window_controls: Option<pdfcraft_ui_egui::window_controls::Layout>,
 }
 
+/// Whether the window is a native Wayland one (not X11 or XWayland).
+#[cfg(all(unix, not(target_os = "macos")))]
+fn native_wayland(cc: &eframe::CreationContext<'_>) -> bool {
+    use raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
+    cc.display_handle().is_ok_and(|handle| matches!(handle.as_raw(), RawDisplayHandle::Wayland(_)))
+}
+
+#[cfg(not(all(unix, not(target_os = "macos"))))]
+fn native_wayland(_: &eframe::CreationContext<'_>) -> bool {
+    false
+}
+
 fn app_creator<'a>(
     launch: Launch,
     started: Rc<Cell<bool>>,
@@ -396,68 +431,42 @@ fn app_creator<'a>(
         app.enable_desktop_theme();
         // The system's reopen-windows choice (macOS) starts the preference; a saved choice replaces it.
         app.reopen_last_session = reopen::system_default();
-        let saved_settings = cc.storage.and_then(|s| s.get_string("pdfcraft").or_else(|| s.get_string(LEGACY_STORAGE_KEY)));
+        let saved_settings = cc.storage
+            .and_then(|s| s.get_string("pdfcraft").or_else(|| s.get_string(LEGACY_STORAGE_KEY)));
 
-        let has_saved_settings = saved_settings.is_some();
-
-        // Remember whether a language preference was explicitly saved.
-        // "auto" is a valid personal choice and must not be overridden.
+        // Preserve the explicit "auto" choice and all valid upstream preferences.
         let saved_language = saved_settings
             .as_deref()
             .and_then(|json| serde_json::from_str::<serde_json::Value>(json).ok())
             .and_then(|value| value.get("language").and_then(|v| v.as_str()).map(str::to_owned));
 
-        let has_saved_language = saved_language.is_some();
-
         if let Some(json) = saved_settings {
             app.restore(&json);
         }
 
-        // Previously supported languages may no longer be in the
-        // English/Vietnamese release. Preserve valid preferences,
-        // but use English for unsupported saved language codes.
-        if let Some(language) = saved_language.as_deref() {
-            if !matches!(language, "auto" | "en" | "vi") {
-                app.language = "en".to_string();
-            }
-        }
-
-        // For installed Windows copies, the per-user Registry preference
-        // takes priority over legacy RON and MSI language settings.
-        // Portable copies continue using their own saved preferences.
         #[cfg(target_os = "windows")]
         if pdfcraft_ui_egui::portable::data_dir().is_none() {
-            if let Some(language) = pdfcraft_ui_egui::language_registry::read() {
-                // A per-user preference always wins, including after MSI upgrades.
-                app.language = language.to_string();
-            } else if let Some(language) = saved_language.as_deref() {
-                // Migrate explicit legacy choices without overriding HKCU.
-                // "auto" remains a valid preference in the existing settings.
-                if matches!(language, "en" | "vi") {
-                    if let Err(error) = pdfcraft_ui_egui::language_registry::write(language) {
-                        log::warn!("Could not migrate per-user language: {error}");
+            // "auto" is an explicit preference; never replace it with MSI/HKCU.
+            if saved_language.as_deref() != Some("auto") {
+                if let Some(language) = pdfcraft_ui_egui::language_registry::read() {
+                    app.language = language.to_string();
+                } else if let Some(language) = saved_language.as_deref() {
+                    // Migrate old, explicit EN/VI selections into HKCU.
+                    if matches!(language, "en" | "vi") {
+                        if let Err(error) = pdfcraft_ui_egui::language_registry::write(language) {
+                            log::warn!("Could not migrate interface language: {error}");
+                        }
                     }
-                }
-            } else if !has_saved_language {
-                // Seed HKCU only when this user has no existing language choice.
-                // The application runs as the actual user, not the MSI service.
-                if let Some(language) = msi_install_language() {
+                } else if let Some(language) = msi_install_language() {
+                    // Only seed a new user's setting, never replace a saved one.
                     app.language = language.to_string();
                     if let Err(error) = pdfcraft_ui_egui::language_registry::write(language) {
-                        log::warn!("Could not initialize per-user language: {error}");
+                        log::warn!("Could not initialize interface language: {error}");
                     }
                 }
             }
         }
-
-        // Ask only on the first launch of a genuinely new Portable copy.
-
-        // Existing settings and explicit command-line language choices take precedence.
-        let language_on_command_line = options.iter().any(|(key, _)| key == "language");
-
-        app.portable_language_prompt =
-            pdfcraft_ui_egui::portable::data_dir().is_some() && is_first_run() && !has_saved_settings && !language_on_command_line;
-
+        app.window_state = pdfcraft_ui_egui::window_state::WindowState::started_with(cc.storage);
         app.integrated_titlebar = integrated;
         app.window_controls = window_controls;
         app.system_text_scale = text_scale::system();
@@ -467,17 +476,20 @@ fn app_creator<'a>(
         {
             app.motion.source = Some(motion::source());
         }
-        // Check the lhtPDF GitHub Latest release only when requested.
-        // Downloads and installation remain manual.
         app.update_source = Some(std::sync::Arc::new(updates::latest_release));
         app.printer_source = Some(pdfcraft_ui_egui::system_printers());
         app.os_key_store_ids = cfg!(any(target_os = "macos", target_os = "windows"));
         #[cfg(target_os = "macos")]
         {
             app.os_events = Some(apple_events.connect(&cc.egui_ctx));
+            // winit's Quit (⌘Q) ends the process without asking about unsaved changes (#1136). This
+            // menu's Quit closes the window instead, so `guard_quit` asks, as for the close button.
+            if let Err(e) = craft_quit::install_app_menu(&cc.egui_ctx, "PdfCraft") {
+                log::warn!("couldn't install the app menu, so ⌘Q quits without asking to save: {e}");
+            }
         }
         if let Some(server) = instance {
-            app.os_events = Some(server.connect(&cc.egui_ctx));
+            app.os_events = Some(server.connect(&cc.egui_ctx, native_wayland(cc)));
         }
         if let Some(file) = &control_file {
             let client = app.attach_control(&cc.egui_ctx);
@@ -640,7 +652,7 @@ fn configure_gpu(native: &mut eframe::NativeOptions) {
     setup.instance_descriptor.flags = setup.instance_descriptor.flags.difference(eframe::wgpu::InstanceFlags::VALIDATION_INDIRECT_CALL).with_env();
     // egui-wgpu requests only 8192 pixels even when the adapter can render larger surfaces.
     // A restored 3440-point window at 250% DPI requests 8600 pixels and otherwise panics in
-    // Surface::configure before the app starts. Keep the renderer's other device requirements,
+    // Surface::configure before the app starts. Keep the renderer's other compatible requirements,
     // but enable the adapter's actual 2D texture extent (also for smaller/downlevel adapters).
     let device_descriptor = std::sync::Arc::clone(&setup.device_descriptor);
     setup.device_descriptor = std::sync::Arc::new(move |adapter| {
@@ -681,8 +693,9 @@ fn configure_gpu(native: &mut eframe::NativeOptions) {
 }
 
 /// Surface textures must fit the device's enabled limits, not just the physical GPU's limits.
-/// Changing only the 2D extent preserves egui-wgpu's backend-specific downlevel requirements.
+/// Clamp egui-wgpu's backend-specific requirements before enabling the adapter's full 2D extent.
 fn surface_texture_limits(mut required: eframe::wgpu::Limits, supported: &eframe::wgpu::Limits) -> eframe::wgpu::Limits {
+    required = required.or_worse_values_from(supported);
     required.max_texture_dimension_2d = supported.max_texture_dimension_2d;
     required
 }
@@ -987,14 +1000,49 @@ mod tests {
     fn surface_limits_preserve_other_requirements_and_never_overrequest() {
         for required in [eframe::wgpu::Limits::default(), eframe::wgpu::Limits::downlevel_webgl2_defaults()] {
             for extent in [4096, 8192, 16384] {
-                let supported = eframe::wgpu::Limits { max_texture_dimension_2d: extent, ..required.clone() };
+                let supported = eframe::wgpu::Limits {
+                    max_texture_dimension_2d: extent,
+                    max_bind_groups: 8,
+                    min_uniform_buffer_offset_alignment: 128,
+                    min_storage_buffer_offset_alignment: 128,
+                    ..required.clone()
+                };
                 let enabled = super::surface_texture_limits(required.clone(), &supported);
                 let mut expected = required.clone();
                 expected.max_texture_dimension_2d = extent;
                 assert_eq!(enabled, expected);
                 assert_eq!(enabled.max_texture_dimension_2d, supported.max_texture_dimension_2d);
+                assert!(enabled.check_limits(&supported));
             }
         }
+    }
+
+    #[test]
+    fn surface_limits_fit_v3d_shader_variable_limit() {
+        // Issue #2383: V3D supports 15 variables, below the default request of 16.
+        let required = eframe::wgpu::Limits::default();
+        let supported = eframe::wgpu::Limits { max_texture_dimension_2d: 7680, max_inter_stage_shader_variables: 15, ..required.clone() };
+        let enabled = super::surface_texture_limits(required.clone(), &supported);
+        assert!(enabled.check_limits(&supported), "unsupported device limits: {enabled:?}");
+        let expected = eframe::wgpu::Limits { max_texture_dimension_2d: 7680, max_inter_stage_shader_variables: 15, ..required };
+        assert_eq!(enabled, expected);
+    }
+
+    #[test]
+    fn surface_limits_fit_downlevel_maxima_and_minimum_alignments() {
+        let required = eframe::wgpu::Limits::downlevel_webgl2_defaults();
+        let supported = eframe::wgpu::Limits {
+            max_texture_dimension_2d: 2048,
+            max_bind_groups: 2,
+            max_vertex_attributes: 8,
+            min_uniform_buffer_offset_alignment: 512,
+            min_storage_buffer_offset_alignment: 512,
+            ..required.clone()
+        };
+        let enabled = super::surface_texture_limits(required, &supported);
+        assert!(enabled.check_limits(&supported), "unsupported device limits: {enabled:?}");
+        // Larger minimum alignments are weaker capabilities, unlike maximum limits.
+        assert_eq!(enabled, supported);
     }
 
     #[test]

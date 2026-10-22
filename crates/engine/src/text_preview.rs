@@ -36,7 +36,7 @@ impl Document {
     /// Background for retyping an added text item, without changing its saved content.
     pub fn added_text_preview(&self, page: usize, index: usize) -> Result<TextEditPreview, String> {
         guard(|| {
-            if !self.added.iter().filter(|a| a.page == page).nth(index).is_some_and(|a| matches!(a.content, crate::AddedContent::Text(_))) {
+            if !self.added().iter().filter(|a| a.page == page).nth(index).is_some_and(|a| matches!(a.content, crate::AddedContent::Text(_))) {
                 return Err("the selected added item is not text".into());
             }
             let editor = self.editor.as_ref().ok_or("the document can't be read")?;

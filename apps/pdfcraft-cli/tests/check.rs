@@ -10,7 +10,7 @@ struct Workdir(PathBuf);
 
 impl Workdir {
     fn new(test: &str) -> Self {
-        let dir = std::env::temp_dir().join(format!("pdfcraft-cli-check-{test}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("lhtPDF-cli-check-{test}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("input/nested")).unwrap();
         let objects = [

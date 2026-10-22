@@ -101,25 +101,19 @@ fn fill_and_sign_dates_follow_the_date_format_preference_and_it_is_remembered() 
 
 #[test]
 fn month_names_follow_the_date_language_or_else_the_interface_language() {
-    let release_languages: Vec<_> =
-        pdfcraft_ui_egui::i18n::Lang::all().map(|lang| lang.code()).collect();
-    if !release_languages.contains(&"cs") {
-        eprintln!("SKIP: month_names_follow_the_date_language_or_else_the_interface_language requires cs; not in Release catalog");
-        return;
-    }
     let mut h = Harness::builder().with_size(egui::vec2(1400.0, 900.0)).build_eframe(|_cc| {
         let mut app = PdfCraftApp::new();
         app.set_option("language", "en").unwrap();
         app.set_option("date-format", "d mmmm yyyy").unwrap();
-        app.set_option("language", "cs").unwrap();
+        app.set_option("language", "vi").unwrap();
         app.set_option("dialog", "preferences").unwrap();
         app
     });
     h.run_steps(3);
     let text = |h: &Harness<'static, PdfCraftApp>| h.state().date_text(None).unwrap();
-    assert_eq!(text(&h), h.state().session.today_text(None, Some("cs")).unwrap(), "follows the interface (Czech)");
+    assert_eq!(text(&h), h.state().session.today_text(None, Some("vi")).unwrap(), "follows the interface (Vietnamese)");
     // The picker offers following the interface first, then the interface languages.
-    assert!(shows(&h, "Stejný jako rozhraní (Čeština)"));
+    assert!(shows(&h, "Giống giao diện (Tiếng Việt)"));
     h.state_mut().set_option("date-language", "es").unwrap();
     h.run_steps(2);
     assert_eq!(text(&h), h.state().session.today_text(None, Some("es")).unwrap());

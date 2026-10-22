@@ -7,7 +7,7 @@ use std::process::{Command, Output};
 const BIN: &str = env!("CARGO_BIN_EXE_pdfcraft-cli");
 
 fn tmp(test: &str, name: &str) -> PathBuf {
-    let d = std::env::temp_dir().join(format!("pdfcraft-cli-render-{test}-{}", std::process::id()));
+    let d = std::env::temp_dir().join(format!("lhtPDF-cli-render-{test}-{}", std::process::id()));
     std::fs::create_dir_all(&d).unwrap();
     d.join(name)
 }
@@ -54,6 +54,17 @@ fn jpeg_and_tiff_names_get_those_formats() {
     assert!(render(&pdf, &tif).status.success());
     let bytes = std::fs::read(&tif).unwrap();
     assert!(bytes.starts_with(b"II*\0") || bytes.starts_with(b"MM\0*"), "not a TIFF: {:?}", &bytes[..4]);
+}
+
+#[test]
+fn the_file_records_the_dpi_it_was_rendered_at() {
+    // The engine's tests check each format; this checks that `--dpi` reaches the file.
+    let pdf = fixture("dpi");
+    let jpg = tmp("dpi", "p1.jpg");
+    assert!(render(&pdf, &jpg).status.success());
+    let bytes = std::fs::read(&jpg).unwrap();
+    assert_eq!(&bytes[6..11], b"JFIF\0");
+    assert_eq!(bytes[13..18], [1, 0, 36, 0, 36], "JFIF density in dots per inch");
 }
 
 #[test]

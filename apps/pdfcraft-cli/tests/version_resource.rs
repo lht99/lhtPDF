@@ -1,4 +1,4 @@
-//! `pdfcraft-cli.exe` carries a Windows version resource (`build.rs`), so Explorer, PowerShell's
+//! `lhtPDF-cli.exe` carries a Windows version resource (`build.rs`), so Explorer, PowerShell's
 //! `VersionInfo` and inventory tools see its version and publisher, as they do for `pdfcraft.exe`.
 
 #![cfg(windows)]
@@ -34,10 +34,10 @@ fn the_exe_has_version_info_with_the_package_version() {
     let resource = &exe[start..];
     for (key, value) in [
         ("ProductName", "lhtPDF"),
-        ("FileDescription", "lhtPDF Command-Line Tool"),
+        ("FileDescription", "lhtPDF command-line tool"),
         ("LegalCopyright", "Copyright (c) the PdfCraft contributors. MIT OR Apache-2.0."),
-        ("OriginalFilename", "pdfcraft-cli.exe"),
-        ("InternalName", "pdfcraft-cli"),
+        ("OriginalFilename", "lhtPDF-cli.exe"),
+        ("InternalName", "lhtPDF-cli"),
         ("FileVersion", env!("CARGO_PKG_VERSION")),
         ("ProductVersion", env!("CARGO_PKG_VERSION")),
     ] {

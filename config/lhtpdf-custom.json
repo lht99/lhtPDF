@@ -1,0 +1,330 @@
+{
+    "schemaVersion":  1,
+    "project":  {
+                    "name":  "lhtPDF",
+                    "repository":  "lht99/lhtPDF",
+                    "upstreamStrategy":  "upstream-first"
+                },
+    "branding":  {
+                     "applicationName":  "lhtPDF",
+                     "windowTitle":  "lhtPDF",
+                     "publisher":  "lhtPDF",
+                     "executable":  "lhtPDF.exe",
+                     "cliExecutable":  "lhtPDF-cli.exe",
+                     "iconSource":  "release-main",
+                     "iconPath":  "assets/branding/lhtpdf.ico",
+                     "documentIconPath":  "assets/app-icon/pdfcraft-document.ico",
+                     "required":  true
+                 },
+    "interface":  {
+                      "menuLayout":  "horizontal",
+                      "preserveCustomMenus":  true,
+                      "preserveUpstreamFeatures":  true,
+                      "languages":  [
+                                        "en",
+                                        "vi"
+                                    ],
+                      "defaultLanguage":  "auto",
+                      "oneClickLanguageButton":  true,
+                      "languageButtonDropdown":  false,
+                      "pdfViewerToolbarLayout":  "horizontal",
+                      "pdfViewerToolbarHeight":  56,
+                      "pdfViewerToolbarHorizontalScroll":  true,
+                      "preserveUpstreamPdfNavigation":  true
+                  },
+    "installer":  {
+                      "productName":  "lhtPDF",
+                      "upgradeCode":  "680426D2-914F-4F51-9368-544207E1BC13",
+                      "identityManifest":  "packaging/windows/lhtpdf-identity.json",
+                      "languages":  [
+                                        "en",
+                                        "vi"
+                                    ],
+                      "preserveUserSettings":  true,
+                      "pdfContextMenu":  true,
+                      "imageContextMenu":  true,
+                      "minimumExistingVersion":  "26.10.21"
+                  },
+    "portable":  {
+                     "enabled":  true,
+                     "dataDirectory":  "lhtPDFData",
+                     "legacyDataDirectory":  "PdfCraftData"
+                 },
+    "updater":  {
+                    "repository":  "lht99/lhtPDF",
+                    "preserveUpdatePreferences":  true
+                },
+    "ocr":  {
+                "preserveUpstreamOCR":  true,
+                "includeTesseract":  true,
+                "tesseractLanguages":  [
+                                           "eng",
+                                           "vie",
+                                           "kor"
+                                       ],
+                "preserveFontLicenses":  true
+            },
+    "integration":  {
+                        "upstreamBase":  "ec0a965074f376a5bf610435948e4e5184bf3299",
+                        "manifest":  "target/lhtpdf-upstream-sync/sync-manifest-step1948.tsv",
+                        "syncEngine":  "target/lhtpdf-upstream-sync/sync-custom.ps1",
+                        "requireReviewOnConflict":  true,
+                        "autoApplyUnreviewedPatches":  false,
+                        "protectMain":  true
+                    },
+    "requiredValidation":  {
+                               "horizontalMenu":  true,
+                               "applicationIcon":  true,
+                               "windowsIdentity":  true,
+                               "interfaceLanguages":  true,
+                               "installerLanguages":  true,
+                               "portable":  true,
+                               "updater":  true,
+                               "ocrAssets":  true,
+                               "upstreamFeatures":  true,
+                               "homeSupportLink":  true,
+                               "pdfViewerToolbar":  true
+                           },
+    "home":  {
+                 "supportUrl":  "https://letuan.io.vn",
+                 "supportLabel":  "Visit https://letuan.io.vn",
+                 "openUrlMechanism":  "egui-platform-output",
+                 "kittestDeliveryFrames":  1
+             },
+    "uiRegression":  {
+                         "expectedTestCount":  84,
+                         "inlineSearch":  {
+                                              "test":  "links::inline_pdf_toolbar_search_finds_navigates_and_shares_ctrl_f",
+                                              "accessibilityLabel":  "Find text",
+                                              "query":  "o",
+                                              "expectedMatches":  2
+                                          },
+                         "home":  {
+                                      "test":  "links::home_screen_links",
+                                      "deliveryFrames":  1,
+                                      "outputCommand":  "egui::OutputCommand::OpenUrl"
+                                  },
+                         "editMenu":  {
+                                          "test":  "text_select::selected_text_copy_edit_and_context_menus",
+                                          "accessibilityLabel":  "Edit",
+                                          "selection":  "topmost"
+                                      },
+                         "fileRadio":  {
+                                           "test":  "marks::backgrounds_and_watermarks_from_a_file",
+                                           "accessibilityLabel":  "File",
+                                           "role":  "RadioButton"
+                                       },
+                         "viewMenu":  {
+                                          "test":  "theme::toolbar_and_view_menu_share_three_state_preferences",
+                                          "accessibilityLabel":  "View",
+                                          "selection":  "topmost",
+                                          "themeSubmenuLabel":  "Display theme ⏵"
+                                      }
+                     },
+    "uiRegressionContracts":  {
+                                  "upgradeComponentPolicy":  {
+                                                                 "version":  1,
+                                                                 "preserveVerifiedRegressionFixes":  true,
+                                                                 "preserveCustomUiAndUpstreamFeatures":  true,
+                                                                 "auditEachComponentIndependently":  true,
+                                                                 "reportEachComponentStatus":  true,
+                                                                 "continueAuditingAfterComponentFailure":  true,
+                                                                 "neverSilentlyOverwriteUnknownUpstream":  true,
+                                                                 "neverAutomaticallyPromoteVerifiedHead":  true,
+                                                                 "statuses":  [
+                                                                                  "INTEGRATED",
+                                                                                  "NEEDS_REPAIR",
+                                                                                  "INCOMPATIBLE",
+                                                                                  "NOT_VERIFIED"
+                                                                              ],
+                                                                 "protectedComponents":  [
+                                                                                             "home-branding",
+                                                                                             "edit-mode-selector",
+                                                                                             "tab-strip-width",
+                                                                                             "tab-scroll-selector",
+                                                                                             "horizontal-menu",
+                                                                                             "pdf-action-toolbar",
+                                                                                             "inline-search"
+                                                                                         ]
+                                                             },
+                                  "lastVerifiedStep":  2113,
+                                  "verifiedUiRsTests":  55,
+                                  "verifiedUiRsFailures":  0,
+                                  "full84TestSuiteStatus":  "PASS",
+                                  "narrowTabRegressionTest":  "narrow_tab_strips_accept_vertical_wheel_scrolling",
+                                  "narrowTabSelectorRole":  "Tab",
+                                  "version":  1,
+                                   "releaseVersionSource": {"path": "Cargo.toml", "section": "workspace.package", "key": "version", "requireInternalPathDependenciesInheritWorkspaceVersion": true},
+                                   "aboutVersion": {"source": "pdfcraft_engine::build_info::version()", "workspaceVersionSource": "env!(\"CARGO_PKG_VERSION\")", "requireDynamicVersion": true},
+                                  "branding":  {
+                                                   "productName":  "lhtPDF",
+                                                   "homeWelcome":  "Welcome to lhtPDF",
+                                                   "recentFilesEmptyText":  "Files you open in lhtPDF appear here",
+                                                   "regressionTests":  [
+                                                                           "home_shows_welcome_and_tools",
+                                                                           "home_removes_one_recent_file_or_clears_them_all",
+                                                                           "closing_the_last_active_tab_selects_the_previous_one_then_home"
+                                                                       ]
+                                               },
+                                  "editMode":  {
+                                                   "preserveHorizontalEditMenu":  true,
+                                                   "preserveEditModeButton":  true,
+                                                   "modeButtonRole":  "Button",
+                                                   "requireUnambiguousTestSelector":  true,
+                                                   "regressionTest":  "the_edit_tab_turns_on_edit_text_and_images",
+                                                   "lastTargetedTestResult":  "PASS"
+                                               },
+                                  "tabBar":  {
+                                                 "preserveOpenButton":  true,
+                                                 "preserveDiscordButton":  false,
+                                                 "preventControlOverlap":  true,
+                                                 "regressionTest":  "tabs_shrink_to_fit_then_arrows_step_through_them_and_open_stays_in_sight",
+                                                 "status":  "PASS_TARGETED_REGRESSION"
+                                             },
+                                  "validation":  {
+                                                     "fullUiRegressionStatus":  "PASS_55_OF_55_UI_RS",
+                                                     "doNotPromoteVerifiedStateUntilFullPass":  true
+                                                 },
+                                  "regressionRepairContracts":  {
+                                                                    "version":  1,
+                                                                    "automaticSourceRewrite":  false,
+                                                                    "requireUpstreamCompatibilityReview":  true,
+                                                                    "requireRelevantRegressionPass":  true,
+                                                                    "preserveExistingVerifiedTests":  true,
+                                                                    "allowUnknownUpstreamOverwrite":  false,
+                                                                    "components":  [
+                                                                                       {
+                                                                                           "id":  "home-branding",
+                                                                                           "sourceFiles":  [
+                                                                                                               "crates/ui-egui/src/home.rs",
+                                                                                                               "crates/ui-egui/tests/ui.rs"
+                                                                                                           ],
+                                                                                           "requirement":  "Preserve lhtPDF Home branding and verified accessibility assertions.",
+                                                                                           "repairStrategy":  "Review upstream Home changes and restore verified branding assertions without replacing unrelated upstream behavior.",
+                                                                                           "validation":  [
+                                                                                                              "Central Home static contracts",
+                                                                                                              "Home branding UI regression"
+                                                                                                          ]
+                                                                                       },
+                                                                                       {
+                                                                                           "id":  "edit-mode-selector",
+                                                                                           "sourceFiles":  [
+                                                                                                               "crates/ui-egui/src/chrome.rs",
+                                                                                                               "crates/ui-egui/tests/ui.rs"
+                                                                                                           ],
+                                                                                           "requirement":  "Distinguish Edit menu from Edit mode button using accessibility role and explicit selector checks.",
+                                                                                           "repairStrategy":  "Preserve both controls; repair the test selector rather than removing either UI element.",
+                                                                                           "validation":  [
+                                                                                                              "Central Edit selector contract",
+                                                                                                              "Edit mode UI regression"
+                                                                                                          ]
+                                                                                       },
+                                                                                       {
+                                                                                           "id":  "tab-strip-width",
+                                                                                           "sourceFiles":  [
+                                                                                                               "crates/ui-egui/src/chrome.rs",
+                                                                                                               "crates/ui-egui/tests/ui.rs"
+                                                                                                           ],
+                                                                                           "requirement":  "Reserve sufficient horizontal width for trailing toolbar controls without tab overlap.",
+                                                                                           "repairStrategy":  "Recalculate reserved width against actual upstream controls and spacing; do not blindly reuse constants.",
+                                                                                           "validation":  [
+                                                                                                              "Central tab overlap contract",
+                                                                                                              "Targeted tab overlap regression"
+                                                                                                          ]
+                                                                                       },
+                                                                                       {
+                                                                                           "id":  "tab-scroll-selector",
+                                                                                           "sourceFiles":  [
+                                                                                                               "crates/ui-egui/tests/ui.rs"
+                                                                                                           ],
+                                                                                           "requirement":  "Use Role::Tab to distinguish document tabs from similarly labelled accessibility nodes.",
+                                                                                           "repairStrategy":  "Retain role-specific selectors while adapting to actual upstream accessibility structure.",
+                                                                                           "validation":  [
+                                                                                                              "Central narrow-tab selector contract",
+                                                                                                              "Narrow-tab wheel scrolling regression"
+                                                                                                          ]
+                                                                                       },
+                                                                                       {
+                                                                                           "id":  "horizontal-menu",
+                                                                                           "sourceFiles":  [
+                                                                                                               "crates/ui-egui/src/chrome.rs"
+                                                                                                           ],
+                                                                                           "requirement":  "Preserve horizontal menu and all compatible upstream menu actions.",
+                                                                                           "repairStrategy":  "Apply only the recognized menu wrapper transformation; otherwise require manual compatibility review.",
+                                                                                           "validation":  [
+                                                                                                              "Central horizontal menu contract",
+                                                                                                              "Relevant menu UI regressions"
+                                                                                                          ]
+                                                                                       },
+                                                                                       {
+                                                                                           "id":  "pdf-action-toolbar",
+                                                                                           "sourceFiles":  [
+                                                                                                               "crates/ui-egui/src/chrome.rs"
+                                                                                                           ],
+                                                                                           "requirement":  "Preserve horizontal PDF toolbar and correct action routing.",
+                                                                                           "repairStrategy":  "Compare upstream navigation and action handlers before restoring toolbar layout.",
+                                                                                           "validation":  [
+                                                                                                              "Central PDF action routing contracts",
+                                                                                                              "Relevant PDF toolbar UI regressions"
+                                                                                                          ]
+                                                                                       },
+                                                                                       {
+                                                                                           "id":  "inline-search",
+                                                                                           "sourceFiles":  [
+                                                                                                               "crates/ui-egui/src/chrome.rs",
+                                                                                                               "crates/ui-egui/tests/ui_group/links.rs"
+                                                                                                           ],
+                                                                                           "requirement":  "Preserve inline PDF Search and shared upstream Find state.",
+                                                                                           "repairStrategy":  "Restore compatible inline Search integration without duplicating Find state.",
+                                                                                           "validation":  [
+                                                                                                              "Central inline Search contract",
+                                                                                                              "Inline Search UI regression"
+                                                                                                          ]
+                                                                                       }
+                                                                                   ]
+                                                                },
+                                  "fullUiTestVerification":  {
+                                                                 "version":  1,
+                                                                 "package":  "pdfcraft-ui-egui",
+                                                                 "integrationHead":  "3c2d7655469322d49a5b50748138c0f34e07a417",
+                                                                 "scope":  "Current integration working tree, including uncommitted tracked changes",
+                                                                 "ui":  {
+                                                                            "target":  "ui",
+                                                                            "passed":  55,
+                                                                            "failed":  0,
+                                                                            "ignored":  0,
+                                                                            "filteredOut":  0,
+                                                                            "status":  "PASS"
+                                                                        },
+                                                                 "uiGroup":  {
+                                                                                 "target":  "ui_group",
+                                                                                 "passed":  84,
+                                                                                 "failed":  0,
+                                                                                 "ignored":  0,
+                                                                                 "filteredOut":  0,
+                                                                                 "status":  "PASS"
+                                                                             },
+                                                                 "totalPassed":  139,
+                                                                 "totalFailed":  0,
+                                                                 "status":  "PASS",
+                                                                 "evidence":  "STEP 2126 Cargo test output",
+                                                                 "automaticallyPromoteVerifiedHead":  false
+                                                             }
+                              },
+    "fileFormattingPolicy":  {
+                                 "version":  1,
+                                 "encoding":  "UTF-8",
+                                 "byteOrderMark":  false,
+                                 "lineEnding":  "LF",
+                                 "preserveExistingLineEndings":  true,
+                                 "rejectMixedLineEndings":  true,
+                                 "rejectTrailingWhitespace":  true,
+                                 "requireGitDiffCheck":  true,
+                                 "automaticRewriteDuringAudit":  false,
+                                 "managedFiles":  [
+                                                      "config/lhtpdf-custom.json",
+                                                      "scripts/lhtpdf-apply-custom.ps1",
+                                                      "scripts/lhtpdf-audit-components.ps1"
+                                                  ]
+                             }
+}

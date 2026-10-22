@@ -23,7 +23,11 @@ workspace_version() {
   ' "$ROOT/Cargo.toml"
 }
 
-VERSION="${PDFCRAFT_VERSION:-$(workspace_version)}"
+if [ -n "${PDFCRAFT_VERSION:-}" ]; then
+  echo "error: PDFCRAFT_VERSION overrides are disabled; update [workspace.package] version in Cargo.toml" >&2
+  return 1 2>/dev/null || exit 1
+fi
+VERSION="$(workspace_version)"
 if [ -z "$VERSION" ]; then
   echo "error: could not read [workspace.package] version from $ROOT/Cargo.toml" >&2
   exit 1

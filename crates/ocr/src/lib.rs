@@ -10,8 +10,6 @@
 
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
-pub mod tesseract;
-
 use std::path::{Path, PathBuf};
 
 pub use pdfcraft_fonts::helvetica_width;
@@ -26,14 +24,7 @@ pub const RECOGNITION_MODEL: &str = "text-recognition.rten";
 pub const ALPHABET: &str = " 0123456789!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~€ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
 /// The languages the models read (ISO 639-1); all use the Latin alphabet without accents.
-pub const LANGUAGES: &[(&str, &str)] = &[
-    ("en", "English"),
-    ("vie", "Vietnamese"),
-    ("kor", "Korean"),
-    ("eng", "English (Tesseract)"),
-    ("vie+eng", "Vietnamese + English"),
-    ("kor+eng", "Korean + English"),
-];
+pub const LANGUAGES: &[(&str, &str)] = &[("en", "English")];
 
 #[derive(Debug, thiserror::Error)]
 pub enum OcrError {
@@ -223,54 +214,11 @@ fn num(v: f64) -> String {
 /// Page content that writes `words` as invisible text in `/PCHelv` (standard Helvetica,
 /// WinAnsiEncoding), each word stretched to its box so selection and search highlight the
 /// right place. Marked content `/OCR` so it can be told apart from the page's own text.
-/// Write invisible Unicode OCR text using pre-registered Type0 font resources.
-///
-/// Each word's CID sequence must correspond to the selected font's /ToUnicode
-/// mapping. `widths` contains that word's advance at a font size of 1.
-/// CID sequences use two-byte big-endian character codes.
-pub fn unicode_text_layer(words: &[PlacedWord], font_names: &[String], encoded: &[Vec<u8>], widths: &[f64]) -> Vec<u8> {
-    let mut out = b"/OCR BMC\nBT\n3 Tr\n".to_vec();
-
-    for (i, word) in words.iter().enumerate() {
-        let (Some(font), Some(bytes), Some(width)) = (font_names.get(i), encoded.get(i), widths.get(i)) else {
-            continue;
-        };
-
-        if !font.bytes().all(|b| b.is_ascii_alphanumeric()) {
-            continue;
-        }
-
-        let height = word.up[0].hypot(word.up[1]);
-
-        if !width.is_finite() || *width <= 0.0 || height <= 0.0 || bytes.is_empty() {
-            continue;
-        }
-
-        let (top, bottom) = ink_extent(&word.text);
-        let em = [word.up[0] / (top - bottom), word.up[1] / (top - bottom)];
-        let ax = [word.across[0] / width, word.across[1] / width];
-        let origin = [word.origin[0] - em[0] * bottom, word.origin[1] - em[1] * bottom];
-
-        let matrix = [ax[0], ax[1], em[0], em[1], origin[0], origin[1]];
-
-        let numbers: Vec<String> = matrix.iter().map(|v| num(*v)).collect();
-
-        out.extend_from_slice(format!("/{} 1 Tf\n", font).as_bytes());
-        out.extend_from_slice(numbers.join(" ").as_bytes());
-        out.extend_from_slice(b" Tm <");
-
-        for byte in bytes {
-            out.extend_from_slice(format!("{byte:02X}").as_bytes());
-        }
-
-        out.extend_from_slice(b"> Tj\n");
-    }
-
-    out.extend_from_slice(b"ET\nEMC\n");
-    out
-}
 pub fn text_layer(words: &[PlacedWord]) -> Vec<u8> {
-    let mut out = b"/OCR BMC\nBT\n3 Tr\n/PCHelv 1 Tf\n".to_vec();
+    // `3 Tr` and the font are graphics state, which `ET` doesn't reset: without `q … Q` they
+    // would stay set for every later content stream on the page, so text added after OCR (a
+    // header or footer) drew invisibly (#3029).
+    let mut out = b"/OCR BMC\nq\nBT\n3 Tr\n/PCHelv 1 Tf\n".to_vec();
     for w in words {
         let width = helvetica_width(&w.text, 1.0);
         let height = w.up[0].hypot(w.up[1]);
@@ -290,7 +238,7 @@ pub fn text_layer(words: &[PlacedWord]) -> Vec<u8> {
         out.extend(pdfcraft_fonts::literal(&pdfcraft_fonts::win_ansi(&w.text)));
         out.extend_from_slice(b" Tj\n");
     }
-    out.extend_from_slice(b"ET\nEMC\n");
+    out.extend_from_slice(b"ET\nQ\nEMC\n");
     out
 }
 
@@ -325,6 +273,26 @@ mod tests {
         // "Hi" has no descender: its box spans the cap height, from the baseline up.
         assert!(s.contains(&format!("{} 0 0 {} 10 20 Tm (Hi) Tj", num(30.0 / width), num(9.3 / CAP_HEIGHT))), "{s}");
         assert!(s.starts_with("/OCR BMC") && s.ends_with("EMC\n"));
+    }
+
+    /// #3029: the layer's invisible rendering mode and font end with the layer. Every operator
+    /// that sets them sits inside a `q … Q` pair that the layer closes itself, so content drawn
+    /// after it on the page starts from the graphics state it had before.
+    #[test]
+    fn the_layer_restores_the_graphics_state_it_changes() {
+        let w = PlacedWord { text: "Hi".into(), origin: [10.0, 20.0], across: [30.0, 0.0], up: [0.0, 9.3] };
+        let s = String::from_utf8(text_layer(&[w])).unwrap();
+        let mut depth = 0_i32;
+        for token in s.split_ascii_whitespace() {
+            match token {
+                "q" => depth += 1,
+                "Q" => depth -= 1,
+                "Tr" | "Tf" | "Tm" => assert!(depth > 0, "`{token}` outside q … Q in {s:?}"),
+                _ => {}
+            }
+            assert!(depth >= 0, "unbalanced Q in {s:?}");
+        }
+        assert_eq!(depth, 0, "the layer leaves a q open: {s:?}");
     }
 
     /// A word box is tight around the ink, so the text's size and baseline come from the letters:

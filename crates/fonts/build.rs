@@ -46,7 +46,7 @@ fn craft_fonts(dir: &std::path::Path) -> Result<String, String> {
         // AGENTS.md §1.1 bars Adobe's type designs whatever their licence, so a checkout that
         // carries one (craft-fonts has Noto Sans CJK, which is Source Han) never embeds it.
         if BARRED_FAMILIES.iter().any(|barred| family.starts_with(barred)) {
-            // Barred font families are deliberately excluded without a build warning.
+            println!("cargo::warning=craft-fonts: not embedding {family} {style} (AGENTS.md §1.1)");
             continue;
         }
         // Arabic interface faces are small, so the web build keeps them too.

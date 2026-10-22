@@ -32,18 +32,20 @@ function Invoke-Native([string] $What, [scriptblock] $Block) {
   if ($LASTEXITCODE -ne 0) { throw "$What failed with exit code $LASTEXITCODE" }
 }
 
-# The version lives in one place: [workspace.package] version in the root Cargo.toml.
+# The workspace package version in Cargo.toml is the sole release version source.
+if (-not [string]::IsNullOrWhiteSpace($env:PDFCRAFT_VERSION)) {
+  throw 'PDFCRAFT_VERSION overrides are disabled. Update [workspace.package] version in Cargo.toml.'
+}
 $Version = $null
-if (-not $Version) {
-  $inPkg = $false
-  foreach ($line in Get-Content (Join-Path $Root 'Cargo.toml')) {
-    if ($line -match '^\s*\[') { $inPkg = ($line.Trim() -eq '[workspace.package]'); continue }
-    if ($inPkg -and $line -match '^\s*version\s*=\s*"([^"]+)"') { $Version = $Matches[1]; break }
-  }
+$inPkg = $false
+foreach ($line in Get-Content (Join-Path $Root 'Cargo.toml')) {
+  if ($line -match '^\s*\[') { $inPkg = ($line.Trim() -eq '[workspace.package]'); continue }
+  if ($inPkg -and $line -match '^\s*version\s*=\s*"([^"]+)"') { $Version = $Matches[1]; break }
 }
 if (-not $Version) { throw 'could not read [workspace.package] version from Cargo.toml' }
-
-$ReleaseLabel = $Version
+if ($Version -notmatch '^\d+\.\d+\.\d+$') {
+  throw "lhtPDF release version must be numeric: $Version"
+}
 # MSI ProductVersion is numeric (major.minor.build); pre-release tags are dropped there.
 $MsiVersion = ($Version -split '-')[0]
 
@@ -55,53 +57,19 @@ New-Item -ItemType Directory -Force -Path $Dist | Out-Null
 if (-not $env:PDFCRAFT_BUILD_SHA) { $env:PDFCRAFT_BUILD_SHA = (git -C $Root rev-parse HEAD 2>$null) }
 if (-not $env:PDFCRAFT_BUILD_DATE) { $env:PDFCRAFT_BUILD_DATE = (Get-Date).ToUniversalTime().ToString('yyyy-MM-dd') }
 
-Write-Output "PdfCraft $Version for Windows $Arch ($Target)"
-
-# One canonical binary source for Windows x64 releases.
-# MSI and portable ZIP always use the same Release executables.
-if ($Arch -eq 'x64') {
-  $Bin = Join-Path $TargetDir 'release'
-} else {
-  $Bin = Join-Path $TargetDir "$Target\release"
-}
+Write-Output "lhtPDF $Version for Windows $Arch ($Target)"
 
 if (-not $SkipBuild) {
-  # Static CRT: no VC++ redistributable needed.
-  # Apply target-specific flags without changing host build scripts.
+  # Static CRT: no VC++ redistributable needed. Scoped to the target so host build scripts and
+  # proc-macros are unaffected.
   $flagVar = 'CARGO_TARGET_' + ($Target.ToUpper() -replace '-', '_') + '_RUSTFLAGS'
   [Environment]::SetEnvironmentVariable($flagVar, '-C target-feature=+crt-static')
+  # Fail the build (rather than warn) if the icon/VERSIONINFO can't be embedded.
   $env:PDFCRAFT_REQUIRE_WINRES = '1'
-
-  if ($Arch -eq 'x64') {
-    Invoke-Native 'cargo build (canonical x64 Release)' {
-      cargo build --release --locked -j 20 -p pdfcraft -p pdfcraft-cli
-    }
-  } else {
-    Invoke-Native "cargo build ($Target)" {
-      cargo build --release --locked -j 20 -p pdfcraft -p pdfcraft-cli --target $Target
-    }
-  }
+  Invoke-Native "cargo build ($Target)" { cargo build --release --locked -p pdfcraft -p pdfcraft-cli --target $Target }
 }
 
-# Never package an executable reporting a different release version.
-if ($Arch -eq 'x64') {
-  $CliPath = Join-Path $Bin 'pdfcraft-cli.exe'
-  if (-not (Test-Path -LiteralPath $CliPath -PathType Leaf)) {
-    throw "Missing Release CLI: $CliPath"
-  }
-
-  $CliVersionOutput = & $CliPath --version
-  if ($LASTEXITCODE -ne 0) {
-    throw 'Release CLI version check failed'
-  }
-
-  $ExpectedVersionLine = "lhtPDF $Version"
-  if (@($CliVersionOutput) -notcontains $ExpectedVersionLine) {
-    throw "Release CLI version mismatch: expected $ExpectedVersionLine; got $($CliVersionOutput -join '; ')"
-  }
-
-  Write-Output "ok Release CLI version: $ExpectedVersionLine"
-}
+$Bin = Join-Path $TargetDir "$Target\release"
 
 # Check both binaries' PE headers before packaging. Machine (COFF header) must match -Arch, so an
 # x64 build can never ship labelled arm64 (#61). Subsystem (optional header): 2 = Windows GUI,
@@ -130,6 +98,7 @@ foreach ($f in 'LICENSE-MIT', 'LICENSE-APACHE', 'NOTICE') {
   Copy-Item (Join-Path $Root $f) $Stage
 }
 Copy-Item (Join-Path $Root 'assets\app-icon\LICENSE-document.txt') $Stage
+
 # OCR fonts are embedded from the optional craft-fonts checkout, never stored in this repository.
 # The MSI expects these two licence filenames in the staging directory.
 if ($env:CRAFT_FONTS_DIR) {
@@ -196,7 +165,7 @@ if (-not (Test-Path -LiteralPath $TesseractLicense -PathType Leaf)) {
 Copy-Item -LiteralPath $TesseractLicense `
   -Destination (Join-Path $TesseractDir 'LICENSE-Tesseract.txt')
 # ---- MSI ---------------------------------------------------------------------------------------
-$Msi = Join-Path $Dist "lhtPDF-$ReleaseLabel-windows-$Arch.msi"
+$Msi = Join-Path $Dist "lhtPDF-$Version-windows-$Arch.msi"
 Invoke-Native 'wix build' {
   wix build (Join-Path $PSScriptRoot 'pdfcraft.wxs') -arch $Arch `
     (Join-Path $PSScriptRoot 'installer-ui.wxs') `
@@ -211,7 +180,7 @@ Remove-Item -Force -ErrorAction SilentlyContinue ([IO.Path]::ChangeExtension($Ms
 & (Join-Path $PSScriptRoot 'sign.ps1') $Msi
 
 # ---- portable zip ------------------------------------------------------------------------------
-$Portable = Join-Path $TargetDir "windows-package\lhtPDF-$ReleaseLabel-windows-$Arch-portable"
+$Portable = Join-Path $TargetDir "windows-package\lhtPDF-$Version-windows-$Arch-portable"
 Remove-Item -Recurse -Force $Portable -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $Portable | Out-Null
 Copy-Item (Join-Path $Stage '*.exe') $Portable
@@ -236,13 +205,13 @@ if ($env:CRAFT_FONTS_DIR) {
 # digital IDs go to PdfCraftData\ next to the exe instead of %APPDATA% (#157; see
 # crates/ui-egui/src/portable.rs).
 Copy-Item (Join-Path $PSScriptRoot 'portable.txt') $Portable
-$Zip = Join-Path $Dist "lhtPDF-$ReleaseLabel-windows-$Arch-portable.zip"
+$Zip = Join-Path $Dist "lhtPDF-$Version-windows-$Arch-portable.zip"
 Remove-Item -Force $Zip -ErrorAction SilentlyContinue
 Compress-Archive -Path $Portable -DestinationPath $Zip
 
 # Smoke-test the CLI when this machine can run it. An ARM64 build made on an x64 runner can't run
 # here; .github/workflows/windows-arm64.yml installs and runs it on ARM64 instead.
-$HostArch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant()
+$HostArch = if ([Environment]::Is64BitOperatingSystem) { if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "arm64" } else { "x64" } } else { "x86" }
 if ($Arch -ne 'arm64' -or $HostArch -eq 'arm64') {
   Invoke-Native 'pdfcraft-cli --version' { & (Join-Path $Stage 'lhtPDF-cli.exe') --version }
 } else {

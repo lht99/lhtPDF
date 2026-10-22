@@ -41,19 +41,6 @@ pub const ALLOWED_LICENCES: &[&str] = &[
 /// (AGENTS.md §1.2).
 pub const BRAND_LICENCE: &str = "LicenseRef-Storyteller-Trademark";
 
-/// Owner-controlled lhtPDF branding, restricted to two explicitly named files.
-/// This is not a general-purpose licence allowlist entry.
-pub const LHTPDF_BRAND_LICENCE: &str = "LicenseRef-lhtPDF-Brand";
-
-pub const LHTPDF_BRAND_FILES: &[&str] = &[
-    "assets/branding/lhtpdf-banner.png",
-    "assets/branding/lhtpdf-document-icon.png",
-    "assets/app-icon/pdfcraft-1024.png",
-    "assets/app-icon/pdfcraft.ico",
-    "assets/app-icon/pdfcraft-document.ico",
-    "assets/app-icon/hicolor/256x256/apps/ai.storyteller.pdfcraft.png",
-];
-
 pub const ADOBE_DATA_ALLOWED: &[(&str, &str)] = &[("hayro-cmap", "assets/cmaps.brotli"), ("hayro-interpret", "src/font/generated/metrics.rs")];
 
 /// First-party files on that same closed list: generated tables of Adobe-authored non-visual
@@ -255,8 +242,7 @@ pub fn check(root: &Path, m: &Manifest, repo_files: &[String], lock: &BTreeSet<(
             problems.push(format!("{}: listed twice", a.path));
         }
         let brand = a.licence == BRAND_LICENCE && a.kind == "logo" && a.path.starts_with("docs/brand/");
-        let lhtpdf_brand = a.licence == LHTPDF_BRAND_LICENCE && a.kind == "logo" && LHTPDF_BRAND_FILES.contains(&a.path.as_str());
-        if !brand && !lhtpdf_brand {
+        if !brand {
             licence_ok(&a.path, &a.licence, &mut problems);
         }
         if !root.join(&a.licence_file).is_file() {
@@ -450,29 +436,6 @@ pub fn render_markdown(m: &Manifest) -> String {
 
 #[cfg(test)]
 mod tests {
-    #[test]
-    fn lhtpdf_brand_exception_is_restricted() {
-        let allowed = [
-            "assets/branding/lhtpdf-banner.png",
-            "assets/branding/lhtpdf-document-icon.png",
-            "assets/app-icon/pdfcraft-1024.png",
-            "assets/app-icon/pdfcraft.ico",
-            "assets/app-icon/pdfcraft-document.ico",
-            "assets/app-icon/hicolor/256x256/apps/ai.storyteller.pdfcraft.png",
-        ];
-
-        for path in allowed {
-            assert!(LHTPDF_BRAND_FILES.contains(&path));
-        }
-
-        for path in ["assets/branding/unknown.png", "assets/app-icon/unknown.ico", "docs/brand/unknown.png"] {
-            assert!(!LHTPDF_BRAND_FILES.contains(&path));
-        }
-
-        assert_ne!(LHTPDF_BRAND_LICENCE, BRAND_LICENCE);
-        assert!(!ALLOWED_LICENCES.contains(&LHTPDF_BRAND_LICENCE));
-    }
-
     use super::*;
 
     /// The release packages ship assets/models as fetched (#103): every model is credited there.

@@ -14,17 +14,6 @@ pub struct CraftFont {
 }
 
 include!(concat!(env!("OUT_DIR"), "/craft_fonts.rs"));
-// Always-bundled Vietnamese document font. Unlike optional craft-fonts,
-// this face remains available in release builds without CRAFT_FONTS_DIR.
-pub fn document_vietnamese_font() -> &'static CraftFont {
-    static FONT: CraftFont = CraftFont {
-        family: "Be Vietnam Pro",
-        style: "Regular",
-        scripts: &["Latn"],
-        bytes: include_bytes!("../../../assets/ocr-fonts/BeVietnamPro-Regular.ttf"),
-    };
-    &FONT
-}
 
 impl CraftFont {
     /// Whether the font is meant for `script` (ISO 15924, e.g. `"Jpan"`).

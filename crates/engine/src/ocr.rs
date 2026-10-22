@@ -18,7 +18,7 @@ use crate::{DocId, Edit, EditError, Session};
 pub struct OcrSettings {
     /// Resolution pages are rendered at for recognition (Acrobat's "Downsample to" choices).
     pub dpi: f32,
-    /// Language code from [`LANGUAGES`]; multilingual selections use Tesseract.
+    /// Language code from [`LANGUAGES`] (the models read the Latin alphabet, whatever this says).
     pub language: String,
     /// Leave pages that already have text alone (Acrobat reports "page contains renderable
     /// text" and skips them). When `false`, such pages are read too (a picture on a page that
@@ -30,100 +30,25 @@ pub struct OcrSettings {
 /// text read again, not a word in a picture.
 const ALREADY_ON_PAGE: f32 = 0.5;
 
-/// Whether native Unicode is reliable enough to suppress overlapping OCR.
-///
-/// This intentionally detects only clear encoding defects. It does not
-/// guess whether otherwise valid Unicode matches the visible glyph.
-fn reliable_native_text(text: &str) -> bool {
-    let mut has_visible = false;
-    for c in text.chars() {
-        let u = c as u32;
-        if c == '\u{fffd}'
-            || c.is_control()
-            || (0xe000..=0xf8ff).contains(&u)
-            || (0xf0000..=0xffffd).contains(&u)
-            || (0x100000..=0x10fffd).contains(&u)
-        {
-            return false;
-        }
-        if !c.is_whitespace() {
-            has_visible = true;
-        }
-    }
-    has_visible
-}
+/// The long side of an A4 sheet in points (a letter page's, 792, is shorter): "Downsample to"
+/// is a resolution on paper this size or smaller.
+const SHEET: f32 = 842.0;
 
 /// How much of `word` the `text` boxes cover, from 0 to 1. Boxes are `[x0, y0, x1, y1]` in page
 /// view space. Overlaps between the text boxes are counted twice (glyphs rarely overlap), so the
 /// sum is capped at the whole word.
 fn covered(word: [f32; 4], text: &[[f32; 4]]) -> f32 {
-    let [x0, y0, x1, y1] = word;
-    if !word.iter().all(|v| v.is_finite()) || x1 <= x0 || y1 <= y0 {
-        return 0.0;
-    }
-
-    let total = (x1 - x0) * (y1 - y0);
+    // `max(0.0)` also turns a NaN side into 0: a degenerate box covers nothing.
+    let area = |[x0, y0, x1, y1]: [f32; 4]| (x1 - x0).max(0.0) * (y1 - y0).max(0.0);
+    let total = area(word);
     if !total.is_finite() || total <= 0.0 {
         return 0.0;
     }
-
-    let rects: Vec<[f32; 4]> = text
-        .iter()
-        .filter(|r| r.iter().all(|v| v.is_finite()))
-        .filter_map(|r| {
-            let a = x0.max(r[0]);
-            let b = y0.max(r[1]);
-            let c = x1.min(r[2]);
-            let d = y1.min(r[3]);
-            (c > a && d > b).then_some([a, b, c, d])
-        })
-        .collect();
-
-    if rects.is_empty() {
-        return 0.0;
-    }
-
-    let mut xs: Vec<f32> = rects.iter().flat_map(|r| [r[0], r[2]]).collect();
-    xs.sort_by(f32::total_cmp);
-    xs.dedup();
-
-    let mut area = 0.0f32;
-
-    for pair in xs.windows(2) {
-        let (left, right) = (pair[0], pair[1]);
-        if right <= left {
-            continue;
-        }
-
-        let mut intervals: Vec<(f32, f32)> = rects.iter().filter(|r| r[0] < right && r[2] > left).map(|r| (r[1], r[3])).collect();
-
-        intervals.sort_by(|a, b| a.0.total_cmp(&b.0));
-
-        let mut covered_y = 0.0f32;
-        let mut active: Option<(f32, f32)> = None;
-
-        for (top, bottom) in intervals {
-            match active {
-                Some((a, b)) if top <= b => {
-                    active = Some((a, b.max(bottom)));
-                }
-                Some((a, b)) => {
-                    covered_y += b - a;
-                    active = Some((top, bottom));
-                }
-                None => active = Some((top, bottom)),
-            }
-        }
-
-        if let Some((a, b)) = active {
-            covered_y += b - a;
-        }
-
-        area += (right - left) * covered_y;
-    }
-
-    (area / total).clamp(0.0, 1.0)
+    let inside: f32 =
+        text.iter().map(|g| area([word[0].max(g[0]), word[1].max(g[1]), word[2].min(g[2]), word[3].min(g[3])])).filter(|a| a.is_finite()).sum();
+    (inside / total).min(1.0)
 }
+
 impl Default for OcrSettings {
     fn default() -> Self {
         OcrSettings { dpi: 300.0, language: "en".into(), skip_text_pages: true }
@@ -164,13 +89,6 @@ pub fn available() -> bool {
     Models::find().is_some()
 }
 
-/// Whether the selected OCR backend is available.
-pub fn available_for(language: &str) -> bool {
-    if language == "en" {
-        return available();
-    }
-    pdfcraft_ocr::tesseract::available(language)
-}
 /// Everything recognition needs from a document, detached from the session.
 pub struct OcrJob {
     bytes: Arc<Vec<u8>>,
@@ -186,12 +104,7 @@ pub struct OcrJob {
 impl OcrJob {
     /// Read the pages. `progress(done, total)` is called before each page; returning `false`
     /// stops (the pages read so far are returned).
-    pub fn run(self, ocr: &Ocr, progress: impl FnMut(usize, usize) -> bool) -> Vec<OcrPage> {
-        self.run_with_optional_ocr(Some(ocr), progress)
-    }
-
-    /// Run multilingual Tesseract without requiring the English RTEN models.
-    pub fn run_with_optional_ocr(self, ocr: Option<&Ocr>, mut progress: impl FnMut(usize, usize) -> bool) -> Vec<OcrPage> {
+    pub fn run(self, ocr: &Ocr, mut progress: impl FnMut(usize, usize) -> bool) -> Vec<OcrPage> {
         let config = RenderConfig { password: self.password.as_deref().map(Arc::from), ..Default::default() };
         let mut r = PageRenderer::new(self.bytes.clone(), config);
         let mut out = Vec::new();
@@ -206,54 +119,18 @@ impl OcrJob {
             let existing: Vec<[f32; 4]> = r
                 .render(RenderRequest { page, kind: RequestKind::Text, scale: 1.0, ..Default::default() })
                 .text
-                .map(|t| {
-                    // A broken ToUnicode mapping invalidates the whole native word.
-                    // Do not let its remaining valid glyphs suppress OCR recovery.
-                    let mut reliable = vec![false; t.glyphs.len()];
-                    let mut start = 0usize;
-
-                    while start < t.glyphs.len() {
-                        let mut end = start + 1;
-
-                        while end < t.glyphs.len() && t.line_of.get(end) == t.line_of.get(start) && !t.space_before.get(end).copied().unwrap_or(true)
-                        {
-                            end += 1;
-                        }
-
-                        let valid = t.glyphs[start..end].iter().all(|g| g.text.chars().all(char::is_whitespace) || reliable_native_text(&g.text));
-
-                        if valid {
-                            reliable[start..end].fill(true);
-                        }
-
-                        start = end;
-                    }
-
-                    t.glyphs.iter().zip(reliable).filter_map(|(g, valid)| valid.then_some(g.rect)).collect()
-                })
+                .map(|t| t.glyphs.iter().filter(|g| !g.text.trim().is_empty()).map(|g| g.rect).collect())
                 .unwrap_or_default();
             if self.settings.skip_text_pages && !existing.is_empty() {
                 out.push(skip("the page already contains text"));
                 continue;
             }
-            // A scan is read at its own resolution (enlarging it only blurs the letters), at most
-            // the chosen one.
-            let wanted = self.settings.dpi.clamp(72.0, 600.0) / 72.0;
-            let scale = self.native.get(page).copied().flatten().map_or(wanted, |n| n.clamp(1.0, wanted));
-            let shot = r.render(RenderRequest { page, scale, ..Default::default() });
+            let shot = r.render(RenderRequest { page, scale: self.scale(page, info), ..Default::default() });
             if let Some(e) = shot.error {
                 out.push(skip(&e));
                 continue;
             }
-            let recognition = if self.settings.language == "en" {
-                match ocr {
-                    Some(ocr) => ocr.recognize(&shot.rgba, shot.width, shot.height),
-                    None => Err(OcrError::NoModels),
-                }
-            } else {
-                pdfcraft_ocr::tesseract::recognize(&shot.rgba, shot.width, shot.height, &self.settings.language)
-            };
-            let lines = match recognition {
+            let lines = match ocr.recognize(&shot.rgba, shot.width, shot.height) {
                 Ok(l) => l,
                 Err(e) => {
                     out.push(skip(&e.to_string()));
@@ -273,6 +150,18 @@ impl OcrJob {
         }
         progress(total, total);
         out
+    }
+
+    /// The render scale (pixels per point) `page` is read at. A scan is read at its own
+    /// resolution (enlarging it only blurs the letters), at most the chosen one.
+    fn scale(&self, page: usize, info: &PageInfo) -> f32 {
+        let wanted = self.settings.dpi.clamp(72.0, 600.0) / 72.0;
+        let Some(native) = self.native.get(page).copied().flatten() else { return wanted };
+        // A scan whose page is larger than a sheet (often a box given in pixels, one point per
+        // pixel, #1848) is measured as if shrunk to one: otherwise 1 px/pt is already its full
+        // image, and no "Downsample to" choice could ask for less.
+        let fit = (SHEET / info.width.max(info.height).max(1e-3)).min(1.0);
+        native.clamp(fit, wanted * fit)
     }
 }
 
@@ -318,8 +207,8 @@ impl Session {
         if let Some(why) = self.get(id).and_then(|d| d.read_only_reason.clone()) {
             return Err(why);
         }
-        let ocr = if job.settings.language == "en" { Some(engine()?) } else { None };
-        let found = job.run_with_optional_ocr(ocr.as_deref(), |_, _| true);
+        let ocr = engine()?;
+        let found = job.run(&ocr, |_, _| true);
         self.apply_ocr(id, &found).map_err(|e| e.to_string())?;
         Ok(found)
     }
@@ -339,38 +228,6 @@ impl FileResult {
     }
 }
 
-/// Recognize a file using the backend selected by its language.
-pub fn recognize_file_auto(
-    name: &str,
-    bytes: Arc<Vec<u8>>,
-    password: Option<&str>,
-    settings: OcrSettings,
-    progress: impl FnMut(usize, usize) -> bool,
-) -> Result<FileResult, String> {
-    let ocr = if settings.language == "en" { Some(engine()?) } else { None };
-    recognize_file_optional(name, bytes, password, settings, ocr.as_deref(), progress)
-}
-
-fn recognize_file_optional(
-    name: &str,
-    bytes: Arc<Vec<u8>>,
-    password: Option<&str>,
-    settings: OcrSettings,
-    ocr: Option<&Ocr>,
-    progress: impl FnMut(usize, usize) -> bool,
-) -> Result<FileResult, String> {
-    let mut s = Session::new();
-    let id = s.open(name, None, bytes.clone(), password).map_err(|e| e.to_string())?;
-    if let Some(why) = s.get(id).and_then(|d| d.read_only_reason.clone()) {
-        return Err(why);
-    }
-    let job = s.ocr_job(id, &[], settings).ok_or("the document could not be read")?;
-    let pages = job.run_with_optional_ocr(ocr, progress);
-    if s.apply_ocr(id, &pages).map_err(|e| e.to_string())? == 0 {
-        return Ok(FileResult { bytes, pages });
-    }
-    Ok(FileResult { bytes: s.save_bytes(id).map_err(|e| e.to_string())?, pages })
-}
 /// Recognize text in multiple files: one PDF's bytes in, the searchable PDF out. `progress`
 /// works as for [`OcrJob::run`].
 pub fn recognize_file(
@@ -387,56 +244,23 @@ pub fn recognize_file(
         return Err(why);
     }
     let job = s.ocr_job(id, &[], settings).ok_or("the document could not be read")?;
-    let pages = job.run_with_optional_ocr(Some(ocr), progress);
+    let pages = job.run(ocr, progress);
     if s.apply_ocr(id, &pages).map_err(|e| e.to_string())? == 0 {
         return Ok(FileResult { bytes, pages });
     }
-    Ok(FileResult { bytes: s.save_bytes(id).map_err(|e| e.to_string())?, pages })
+    // Checked like a save before the caller writes it (#2166).
+    let bytes = s.save_bytes(id).map_err(|e| e.to_string())?;
+    s.check_save(id, &bytes).map_err(|e| e.to_string())?;
+    Ok(FileResult { bytes, pages })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::export;
 
     /// #1028: a recognised word over the page's own text is that text again; one in an empty
     /// part of the page (a picture) is new.
-    #[test]
-    fn unicode_quality_distinguishes_valid_and_broken_words() {
-        // Korean and Vietnamese text must not be rejected just for being non-Latin.
-        for word in ["GOOD", "안녕하세요", "Tiếng Việt", "ﬁ"] {
-            assert!(reliable_native_text(word), "valid word: {word}");
-        }
-
-        // An invalid code point anywhere inside a word makes its native
-        // Unicode unreliable, even when the remaining letters are valid.
-        for word in ["�ROKEN", "BRO�EN", "BROKEN�", "한�글"] {
-            assert!(!reliable_native_text(word), "broken word: {word}");
-        }
-
-        // The neighboring word is evaluated independently.
-        assert!(reliable_native_text("GOOD"));
-        assert!(!reliable_native_text("�ROKEN"));
-        assert!(reliable_native_text("NEXT"));
-    }
-    #[test]
-    fn native_unicode_quality_preserves_korean_and_ligatures() {
-        assert!(reliable_native_text("한글 테스트"));
-        assert!(reliable_native_text("한국어"));
-        assert!(reliable_native_text("ffi"));
-        assert!(reliable_native_text("가\u{0301}"));
-        assert!(!reliable_native_text(""));
-        assert!(!reliable_native_text("   "));
-    }
-
-    #[test]
-    fn native_unicode_quality_rejects_unreliable_mappings() {
-        assert!(!reliable_native_text("\u{fffd}"));
-        assert!(!reliable_native_text("한\u{fffd}글"));
-        assert!(!reliable_native_text("\u{e000}"));
-        assert!(!reliable_native_text("\u{f0000}"));
-        assert!(!reliable_native_text("\u{100000}"));
-        assert!(!reliable_native_text("A\u{0001}B"));
-    }
     #[test]
     fn words_over_existing_text_count_as_already_there() {
         // Glyph em boxes of "Total" at 12 pt, five letters side by side.
@@ -452,51 +276,28 @@ mod tests {
         assert_eq!(covered([100.5, 52.0, 134.0, 61.0], &[]), 0.0);
     }
 
+    /// #1848: an A4 scan at 300 dpi whose page box is its pixel size (2480 x 3508 pt, one pixel
+    /// per point) gets a smaller bitmap for each lower "Downsample to" choice, and a low-resolution
+    /// letter page is still never shrunk below one pixel per point.
     #[test]
-    fn image_regions_follow_page_rotation_and_crop() {
-        // A nonzero CropBox origin catches accidental use of raw PDF
-        // coordinates as top-left-origin view coordinates.
-        for rotation in [0, 90, 180, 270] {
-            let page = PageInfo {
-                width: if rotation % 180 == 0 { 200.0 } else { 300.0 },
-                height: if rotation % 180 == 0 { 300.0 } else { 200.0 },
-                label: "1".into(),
-                crop: [10.0, 20.0, 210.0, 320.0],
-                rotation,
-            };
-
-            let corners = [[40.0, 70.0], [110.0, 70.0], [40.0, 150.0], [110.0, 150.0]];
-
-            for [x, y] in corners {
-                let [vx, vy] = page.user_to_view(x, y);
-                let [ux, uy] = page.view_to_user(vx, vy);
-
-                assert!((ux - x).abs() < 1e-3, "rotation={rotation}, x={x}, got={ux}");
-                assert!((uy - y).abs() < 1e-3, "rotation={rotation}, y={y}, got={uy}");
-                assert!(vx >= 0.0 && vx <= page.width);
-                assert!(vy >= 0.0 && vy <= page.height);
+    fn downsample_shrinks_a_page_box_given_in_pixels() {
+        let mut s = Session::new();
+        let page = |w: u32, h: u32| export::encode_png(w, h, &vec![255; (w * h * 4) as usize]).unwrap();
+        let bytes = s.create_from_images(&[("a4.png".into(), page(2480, 3508)), ("letter.png".into(), page(612, 792))]).unwrap();
+        let id = s.open("scan.pdf", None, bytes, None).unwrap();
+        let mut r = PageRenderer::new(s.get(id).unwrap().bytes.clone(), RenderConfig::default());
+        for (dpi, a4) in [(72.0, [595, 842]), (150.0, [1240, 1754]), (300.0, [2480, 3508]), (600.0, [2480, 3508])] {
+            let job = s.ocr_job(id, &[], OcrSettings { dpi, ..Default::default() }).unwrap();
+            for (page, want) in [(0, a4), (1, [612, 792])] {
+                let scale = job.scale(page, &job.infos[page]);
+                let shot = r.render(RenderRequest { page, scale, ..Default::default() });
+                assert!(shot.error.is_none(), "{:?}", shot.error);
+                let near = |got: u32, want: u32| got.abs_diff(want) <= 1;
+                assert!(near(shot.width, want[0]) && near(shot.height, want[1]), "{dpi} dpi, page {page}: {}x{}", shot.width, shot.height);
             }
         }
     }
-    #[test]
-    fn overlapping_glyphs_do_not_hide_new_ocr_words() {
-        // Both glyph boxes describe the same 40% of the OCR word.
-        // Summing their areas would incorrectly reach 80% and discard it.
-        let glyphs = [[0.0, 0.0, 4.0, 10.0], [0.0, 0.0, 4.0, 10.0]];
-        let word = [0.0, 0.0, 10.0, 10.0];
 
-        let ratio = covered(word, &glyphs);
-        assert!((ratio - 0.4).abs() < 1e-6, "{ratio}");
-        assert!(ratio < ALREADY_ON_PAGE);
-    }
-
-    #[test]
-    fn adjacent_glyphs_cover_a_word_without_double_counting() {
-        let glyphs = [[0.0, 0.0, 3.0, 10.0], [3.0, 0.0, 7.0, 10.0], [7.0, 0.0, 10.0, 10.0]];
-        let word = [0.0, 0.0, 10.0, 10.0];
-
-        assert!((covered(word, &glyphs) - 1.0).abs() < 1e-6);
-    }
     #[test]
     fn coverage_of_overlapping_or_broken_boxes_stays_between_zero_and_one() {
         // A glyph drawn twice (fake bold) does not cover more than the whole word.

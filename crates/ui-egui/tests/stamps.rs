@@ -22,7 +22,7 @@ fn choosing_and_placing_stamps() {
     assert_eq!(h.state().quick_tool, QuickTool::Stamp(pdfcraft_engine::StampKind::DynApproved));
     let p = {
         let r = h.state().views[0].page_screen_rect(0).unwrap();
-        r.min + egui::vec2(r.width() * 0.5, r.height() * 0.60)
+        r.min + egui::vec2(r.width() * 0.5, r.height() * 0.85)
     };
     h.hover_at(p);
     h.run_steps(1);
@@ -115,7 +115,7 @@ fn creating_placing_and_keeping_custom_stamps() {
     // Place it.
     let p = {
         let r = h.state().views[0].page_screen_rect(0).unwrap();
-        r.min + egui::vec2(r.width() * 0.5, r.height() * 0.60)
+        r.min + egui::vec2(r.width() * 0.5, r.height() * 0.85)
     };
     h.hover_at(p);
     h.run_steps(1);

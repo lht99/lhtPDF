@@ -71,7 +71,8 @@ const PICKERS: &[&str] = &[
 #[test]
 fn every_registered_command_is_implemented() {
     for spec in COMMANDS {
-        if PICKERS.contains(&spec.id) {
+        // Page-text Copy needs a loaded view and egui context, covered by ui_group::text_select.
+        if PICKERS.contains(&spec.id) || spec.id == "edit.copy" {
             continue;
         }
         let mut app = PdfCraftApp::new();
@@ -148,9 +149,19 @@ fn every_registered_command_is_implemented() {
         if spec.id == "view.layout.cover" {
             app.set_option("layout", "two-up").unwrap();
         }
+        // History commands need a real jump (and Back first to make Forward available).
+        if matches!(spec.id, "view.previous_view" | "view.next_view") {
+            app.views[0].go_to_page(1);
+            if spec.id == "view.next_view" {
+                assert!(app.views[0].view_history(false));
+            }
+        }
         let dir = std::env::temp_dir().join(format!("pdfcraft-cmd-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         app.save_override = Some(dir.join("out.pdf").to_string_lossy().into_owned());
+        // A picker the list above misses (file.pin_folder, create.multiple_separate did) must not
+        // open a real file dialog on the desktop running the tests: answer it as a cancel.
+        app.pick_override = Some(Vec::new());
         assert!(app.execute(spec.id), "{} is registered but not implemented (or wrongly disabled)", spec.id);
     }
 }
@@ -259,6 +270,8 @@ fn palette_arrow_keys_select_results_and_enter_runs_the_selection() {
 fn the_pages_menu_comes_from_the_registry() {
     let mut h = harness();
     h.get_by_label("Pages").click();
+    h.run_steps(2);
+    // Pages is already the top-level horizontal menu.
     h.run_steps(3);
     h.get_by_label_contains("Delete pages").click();
     h.run_steps(3);
@@ -285,6 +298,8 @@ fn the_open_recent_menu_lists_files_and_opens_one() {
     });
     h.run_steps(4);
     h.get_by_label("File").click();
+    h.run_steps(2);
+    // File is already the top-level horizontal menu.
     h.run_steps(3);
     h.get_by_label("Open Recent ⏵").hover();
     h.run_steps(3);
@@ -292,7 +307,6 @@ fn the_open_recent_menu_lists_files_and_opens_one() {
     h.get_by_label_contains("recent.pdf").click();
     support::wait_until(&mut h, "recent document", |app| app.views.len() == 2 && app.password_prompt.is_none());
     let app = h.state();
-    assert_eq!(app.views.len(), 2, "the recent file opened in a new tab");
     let active = app.active.unwrap();
     assert_eq!(app.session.get(app.views[active].id).and_then(|d| d.path.as_deref()), Some(path.as_str()), "the active tab is the recent file");
     assert_eq!(app.session.get(app.views[active].id).unwrap().bytes.as_slice(), fixture(2).as_slice());
@@ -304,6 +318,8 @@ fn the_open_recent_menu_lists_files_and_opens_one() {
 fn the_open_recent_menu_is_disabled_while_the_list_is_empty() {
     let mut h = harness();
     h.get_by_label("File").click();
+    h.run_steps(2);
+    // File is already the top-level horizontal menu.
     h.run_steps(3);
     assert!(
         h.query_by(|n| n.label().as_deref() == Some("Open Recent") && n.is_disabled()).is_some(),
@@ -326,6 +342,8 @@ fn clear_recent_files_at_the_foot_of_open_recent_empties_the_list() {
     });
     h.run_steps(4);
     h.get_by_label("File").click();
+    h.run_steps(2);
+    // File is already the top-level horizontal menu.
     h.run_steps(3);
     h.get_by_label("Open Recent ⏵").hover();
     h.run_steps(3);
@@ -333,6 +351,8 @@ fn clear_recent_files_at_the_foot_of_open_recent_empties_the_list() {
     h.run_steps(3);
     assert!(h.state().recent.is_empty(), "the list is empty");
     h.get_by_label("File").click();
+    h.run_steps(2);
+    // File is already the top-level horizontal menu.
     h.run_steps(3);
     assert!(h.query_by(|n| n.label().as_deref() == Some("Open Recent") && n.is_disabled()).is_some(), "and Open Recent is disabled");
 }
@@ -356,7 +376,9 @@ fn the_shortcuts_dialog_lists_the_real_bindings() {
     let mut h = harness();
     h.ctx.set_os(OperatingSystem::Nix);
     h.state_mut().execute("help.shortcuts");
+    assert_eq!(h.state().dialog, Some(Dialog::Shortcuts), "shortcut command must open dialog");
     h.run_steps(3);
+    assert_eq!(h.state().dialog, Some(Dialog::Shortcuts), "shortcut dialog must remain open after render");
     h.get_by_label("Ctrl+Shift+S");
     h.get_by_label("Save as");
     // The keys the document view handles itself are written for the platform too, and Fit
@@ -375,129 +397,37 @@ fn the_shortcuts_dialog_lists_the_real_bindings() {
 }
 
 #[test]
-fn released_languages_switch_immediately_and_survive_restore() {
-    use pdfcraft_ui_egui::i18n::{self, Lang};
-
-    let languages: Vec<Lang> = Lang::all().collect();
-    assert!(!languages.is_empty(), "release language registry must not be empty");
-
-    let mut codes = std::collections::HashSet::new();
-
-    for language in languages {
-        let code = language.code();
-        assert!(codes.insert(code), "duplicate release language: {code}");
-        assert_eq!(Lang::from_code(code), Some(language));
-
-        let mut h = harness();
-
-        h.state_mut().set_option("language", code).unwrap();
-        h.run_steps(3);
-
-        assert_eq!(h.state().language, code);
-        assert_eq!(i18n::current(), language);
-
-        let translated_file = i18n::tr(language, "File");
-        h.get_by_label(translated_file);
-
-        let saved = h.state().persist();
-        let mut restored = PdfCraftApp::new();
-        restored.restore(&saved);
-
-        assert_eq!(restored.language, code, "language must survive restore: {code}");
-    }
-}
-#[test]
-fn toolbar_language_menu_switches_all_released_languages() {
-    use pdfcraft_ui_egui::i18n::{self, Lang};
-
-    let languages: Vec<Lang> = Lang::all().collect();
-    assert!(!languages.is_empty());
-
-    let mut h = harness();
-
-    for language in languages {
-        let current = Lang::from_pref(&h.state().language);
-        let button_label = current.code().to_uppercase();
-
-        h.get_by_label(&button_label).click();
-        h.run_steps(2);
-
-        h.get_by_label(language.name()).click();
-        h.run_steps(3);
-
-        assert_eq!(
-            h.state().language,
-            language.code(),
-            "toolbar did not select {}",
-            language.code()
-        );
-
-        assert_eq!(
-            i18n::current(),
-            language,
-            "rendered language differs from selected language"
-        );
-
-        h.get_by_label(i18n::tr(language, "File"));
-    }
-}
-#[test]
 fn localized_shortcuts_update_immediately_and_keep_command_ids_and_key_bindings() {
-    use pdfcraft_ui_egui::i18n::{self, Lang};
-
-    let languages: Vec<Lang> = Lang::all().collect();
-    assert!(!languages.is_empty(), "no released languages registered");
-
-    for language in languages {
-        let mut h = harness();
-        h.ctx.set_os(OperatingSystem::Windows);
-
-        h.state_mut().set_option("language", language.code()).unwrap();
-        h.state_mut().execute("help.shortcuts");
-        h.run_steps(3);
-
-        assert_eq!(i18n::current(), language);
-                let save_as = pdfcraft_engine::commands::command("file.save_as")
-            .expect("Save as command must be registered");
-        let translated_label = i18n::tr(language, save_as.label)
-            .trim_end_matches('…');
-        h.get_by_label(translated_label);
-        h.get_by_label("Ctrl+Shift+S");
-
-        h.ctx.set_os(OperatingSystem::Mac);
-        h.run_steps(2);
-        h.get_by_label("⇧⌘S");
-
-        h.key_press(Key::Escape);
-        h.run_steps(2);
-
-        h.ctx.set_os(OperatingSystem::Windows);
-        h.key_press_modifiers(Modifiers::CTRL | Modifiers::COMMAND, Key::K);
-        h.run_steps(3);
-
-        assert!(
-            h.state().palette_open,
-            "Ctrl+K must open command palette for language {}",
-            language.code()
-        );
-
-        h.state_mut().set_option("palette", "view.read_mode").unwrap();
-        h.run_steps(2);
-        h.key_press(Key::Enter);
-        h.run_steps(3);
-
-        assert_eq!(
-            h.state().mode,
-            pdfcraft_ui_egui::Mode::Read,
-            "stable command ID failed for language {}",
-            language.code()
-        );
-
-        assert!(!h.state().palette_open);
-
-        let doc = h.state().session.get(h.state().views[0].id).unwrap();
-        assert!(!doc.dirty);
-    }
+    let mut h = harness();
+    h.ctx.set_os(OperatingSystem::Windows);
+    h.state_mut().set_option("language", "vi").unwrap();
+    h.state_mut().execute("help.shortcuts");
+    assert_eq!(h.state().dialog, Some(Dialog::Shortcuts), "shortcut command must open dialog");
+    h.run_steps(3);
+    assert_eq!(h.state().dialog, Some(Dialog::Shortcuts), "shortcut dialog must remain open after render");
+    h.get_by_label("Ctrl+Shift+S");
+    h.state_mut().set_option("language", "en").unwrap();
+    h.run_steps(2);
+    h.get_by_label("Ctrl+Shift+S");
+    h.state_mut().set_option("language", "vi").unwrap();
+    h.ctx.set_os(OperatingSystem::Mac);
+    h.run_steps(2);
+    h.get_by_label("⇧⌘S");
+    h.key_press(Key::Escape);
+    h.run_steps(2);
+    h.ctx.set_os(OperatingSystem::Windows);
+    h.key_press_modifiers(Modifiers::CTRL | Modifiers::COMMAND, Key::K);
+    h.run_steps(3);
+    assert!(h.state().palette_open, "the Vietnamese interface still binds Ctrl+K");
+    // Searching by the stable command id still works in a translated interface.
+    h.state_mut().set_option("palette", "view.read_mode").unwrap();
+    h.run_steps(2);
+    h.key_press(Key::Enter);
+    h.run_steps(3);
+    assert_eq!(h.state().mode, pdfcraft_ui_egui::Mode::Read);
+    assert!(!h.state().palette_open);
+    let doc = h.state().session.get(h.state().views[0].id).unwrap();
+    assert!(!doc.dirty);
 }
 
 /// Menu ▸ View open, with egui told the app runs on `os`.
@@ -505,6 +435,8 @@ fn view_menu(os: OperatingSystem) -> Harness<'static, PdfCraftApp> {
     let mut h = harness();
     h.ctx.set_os(os);
     h.get_by_label("View").click();
+    h.run_steps(2);
+    // View is already the top-level horizontal menu.
     h.run_steps(3);
     h
 }
@@ -520,7 +452,7 @@ fn view_menu_and_tooltips_write_shortcuts_for_the_platform() {
     h.get_by_label("Previous view Ctrl+[");
     h.get_by_label("Find tools and commands… Ctrl+K");
     h.get_by_label("Zoom in (Ctrl++)");
-    h.get_by_label("Print (Ctrl+P)");
+    assert_eq!(h.query_all_by_label("Print (Ctrl+P)").count(), 2, "both lhtPDF Print buttons expose Ctrl+P");
     assert_eq!(h.query_all_by_label_contains("⌘").count(), 0, "no ⌘ outside macOS");
     assert_eq!(h.query_all_by_label_contains("Fit visible").count(), 1, "View lists Fit visible once");
     h.get_by_label("Fit visible Ctrl+3");
@@ -539,15 +471,15 @@ fn the_top_bar_save_button_names_its_shortcut_not_a_milestone() {
     let mut h = harness();
     h.ctx.set_os(OperatingSystem::Windows);
     h.run_steps(2);
-    h.get_by_label("Save (Ctrl+S)");
-    h.get_by_label("Print (Ctrl+P)");
+    assert_eq!(h.query_all_by_label("Save (Ctrl+S)").count(), 2, "both Save buttons expose Ctrl+S");
+    assert_eq!(h.query_all_by_label("Print (Ctrl+P)").count(), 2, "both lhtPDF Print buttons expose Ctrl+P");
     assert_eq!(h.query_all_by_label_contains("(M4)").count(), 0, "no milestone tag in the top bar");
     assert_eq!(h.query_all_by_label_contains("⌘").count(), 0, "no ⌘ outside macOS");
 
     let mut h = harness();
     h.ctx.set_os(OperatingSystem::Mac);
     h.run_steps(2);
-    h.get_by_label("Save (⌘S)");
+    assert_eq!(h.query_all_by_label("Save (⌘S)").count(), 2, "both Save buttons expose the macOS shortcut");
 }
 
 #[test]
@@ -573,6 +505,36 @@ fn the_about_dialog_shows_the_running_version() {
     h.state_mut().execute("help.about");
     h.run_steps(3);
     h.get_by_label_contains(&format!("Version {}", env!("CARGO_PKG_VERSION")));
+}
+
+#[test]
+fn quit_shortcut_requires_exact_modifiers_and_preserves_unsaved_work() {
+    for (os, modifiers) in [
+        (OperatingSystem::Windows, Modifiers { ctrl: true, command: true, ..Default::default() }),
+        (OperatingSystem::Mac, Modifiers { mac_cmd: true, command: true, ..Default::default() }),
+    ] {
+        for (extra, dirty, should_close) in
+            [(Modifiers::ALT, false, false), (Modifiers::SHIFT, false, false), (Modifiers::NONE, false, true), (Modifiers::NONE, true, false)]
+        {
+            let mut h = harness();
+            h.ctx.set_os(os);
+            if dirty {
+                assert!(h.state_mut().execute("page.insert_blank"));
+                h.run_steps(2);
+            }
+            h.event(egui::Event::Key { key: Key::Q, physical_key: None, pressed: true, repeat: false, modifiers: modifiers | extra });
+            h.step();
+            let closes = h.output().viewport_output.values().any(|v| v.commands.contains(&egui::ViewportCommand::Close));
+            assert_eq!(closes, should_close, "{os:?}, extra={extra:?}, dirty={dirty}");
+            if dirty {
+                h.get_by_label("Cancel").click();
+                h.run_steps(2);
+                assert_eq!(h.state().views.len(), 1);
+                assert!(h.state().session.get(h.state().views[0].id).unwrap().dirty);
+                assert!(!h.output().viewport_output.values().any(|v| v.commands.contains(&egui::ViewportCommand::Close)));
+            }
+        }
+    }
 }
 
 #[test]

@@ -14,12 +14,10 @@ fn main() {
     }
     let mut res = winresource::WindowsResource::new();
     res.set("ProductName", "lhtPDF")
-        .set("FileDescription", "lhtPDF Command-Line Tool")
+        .set("FileDescription", "lhtPDF command-line tool")
         .set("LegalCopyright", "Copyright (c) the PdfCraft contributors. MIT OR Apache-2.0.")
-        .set("OriginalFilename", "pdfcraft-cli.exe")
-        .set("InternalName", "pdfcraft-cli")
-        .set("FileVersion", env!("CARGO_PKG_VERSION"))
-        .set("ProductVersion", env!("CARGO_PKG_VERSION"));
+        .set("OriginalFilename", "lhtPDF-cli.exe")
+        .set("InternalName", "lhtPDF-cli");
     if let Err(e) = res.compile() {
         if std::env::var_os("PDFCRAFT_REQUIRE_WINRES").is_some() {
             println!("cargo::error=embedding Windows resources failed: {e}");

@@ -3,7 +3,6 @@
 
 use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
-use pdfcraft_engine::links;
 use pdfcraft_ui_egui::{Dialog, PdfCraftApp};
 
 fn harness(setup: impl FnOnce(&mut PdfCraftApp) + 'static) -> Harness<'static, PdfCraftApp> {
@@ -19,51 +18,82 @@ fn harness(setup: impl FnOnce(&mut PdfCraftApp) + 'static) -> Harness<'static, P
 
 #[test]
 fn discord_button_in_the_top_bar_opens_discord() {
-    let mut h = harness(|_| {});
-    h.get_by_label("Discord").click();
-    h.run_steps(2);
-    assert_eq!(h.state().last_opened_url.as_deref(), Some(links::DISCORD));
-    assert_eq!(links::DISCORD, "https://discord.gg/artcraft");
+    let h = harness(|_| {});
+    assert!(
+        h.query_by_label("Discord").is_none(),
+        "Discord must not appear in the lhtPDF top bar"
+    );
 }
 
 #[test]
 fn home_screen_links() {
-    for (label, url) in [
-        ("Join our Discord", links::DISCORD),
-        ("PdfCraft web page", "https://getartcraft.com/apps/pdfcraft"),
-        ("PdfCraft on GitHub", "https://github.com/storytold/pdfcraft"),
-        ("ArtCraft website", "https://getartcraft.com"),
-    ] {
-        let mut h = harness(|_| {});
-        h.get_by_label("Join the ArtCraft community");
-        h.get_by_label(label).click();
-        h.run_steps(2);
-        assert_eq!(h.state().last_opened_url.as_deref(), Some(url), "{label}");
-    }
+    let mut h = harness(|_| {});
+    h.get_by_label("lhtPDF - Website & Support");
+    h.get_by_label("Visit https://letuan.io.vn").click();
+
+    // egui_kittest delivers the click in the next frame.
+    // OpenUrl is frame-local and must be checked immediately afterward.
+    h.run_steps(1);
+
+    let opened = h.output().platform_output.commands.iter().any(|command| {
+        matches!(
+            command,
+            egui::OutputCommand::OpenUrl(url)
+                if url.url == "https://letuan.io.vn"
+        )
+    });
+
+    assert!(opened, "lhtPDF Home must open its official support URL");
 }
 
 #[test]
 fn about_dialog_shows_the_brand_and_links() {
     let pdf = b"%PDF-1.7\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >> endobj\ntrailer << /Root 1 0 R >>\n%%EOF";
     // With a document open, so the home screen's own links are not on screen.
-    let mut h = harness(move |app| {
+    let h = harness(move |app| {
         app.open_bytes("one.pdf", None, pdf.to_vec()).unwrap();
         app.dialog = Some(Dialog::About);
     });
-    assert!(h.query_all_by_label("ArtCraft").count() >= 2, "the mark and the wordmark (alt text)");
-    h.get_by_label("Join our Discord").click();
-    h.run_steps(2);
-    assert_eq!(h.state().last_opened_url.as_deref(), Some(links::DISCORD));
+    assert!(
+        h.query_all_by_label("lhtPDF").count() >= 1,
+        "About must display the lhtPDF brand"
+    );
+    assert!(
+        h.query_by_label("Join our Discord").is_none(),
+        "Discord must not appear in the personalized About dialog"
+    );
 }
 
 #[test]
-fn help_commands_open_each_link() {
-    for l in links::LINKS {
-        let mut h = harness(|_| {});
-        assert!(h.state_mut().execute(l.command), "{}", l.command);
-        assert_eq!(h.state().last_opened_url.as_deref(), Some(l.url));
-        assert_eq!(pdfcraft_engine::commands::command(l.command).unwrap().menu, Some("Help"));
+fn help_commands_match_lhtpdf_menu_contract() {
+    use pdfcraft_engine::commands;
+
+    let help: Vec<_> = commands::menu("Help")
+        .filter(|spec| spec.id != "help.shortcuts")
+        .map(|spec| spec.id)
+        .collect();
+
+    assert_eq!(
+        help,
+        ["help.check_updates", "help.about"],
+        "lhtPDF Help menu must contain only updates and About"
+    );
+
+    assert!(
+        commands::command("help.shortcuts").is_some(),
+        "keyboard shortcuts must remain registered for the header button"
+    );
+
+    for id in ["help.discord", "help.app_page", "help.github", "help.website"] {
+        assert!(
+            commands::command(id).is_none(),
+            "legacy Help link command must not be registered: {id}"
+        );
     }
+
+    let mut h = harness(|_| {});
+    assert!(h.state_mut().execute("help.about"));
+    assert_eq!(h.state().dialog, Some(Dialog::About));
 }
 
 /// Runs frames until the node labelled `label` exists and has stopped moving, then returns it.
@@ -99,4 +129,85 @@ fn about_dialog_has_contributors_and_models_tabs() {
     settled(&mut h, "Models").click();
     h.run_steps(4);
     assert!(h.query_all_by_label("Anthropic").count() >= 1);
+}
+
+/// Search through real toolbar controls, then reuse upstream Find via Ctrl+F.
+#[test]
+fn inline_pdf_toolbar_search_finds_navigates_and_shares_ctrl_f() {
+    use egui::accesskit::Role;
+
+    const PDF: &[u8] = b"%PDF-1.7
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >> endobj
+4 0 obj << /Length 55 >> stream
+BT /F1 14 Tf 20 150 Td (The quick brown fox) Tj ET
+endstream endobj
+5 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj
+trailer << /Root 1 0 R >>
+%%EOF";
+
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1400.0, 1100.0))
+        .build_eframe(|_cc| {
+            let mut app = PdfCraftApp::new();
+            app.set_option("language", "en").unwrap();
+            app.open_bytes("inline-search.pdf", None, PDF.to_vec()).unwrap();
+            app
+        });
+
+    h.run_steps(6);
+    h.get_by_label("Find text").scroll_to_me();
+    h.run_steps(3);
+    h.get_by_label("Find text").click();
+    h.run_steps(3);
+
+    assert!(
+        h.state().views[0].find.as_ref().is_some_and(|f| f.toolbar_visible),
+        "toolbar Search must reveal its inline input"
+    );
+
+    h.get_by_role_and_label(Role::TextInput, "Find text").click();
+    h.run_steps(1);
+    h.get_by_role_and_label(Role::TextInput, "Find text").type_text("o");
+
+    crate::support::wait_until(&mut h, "two PDF text matches", |app| {
+        app.views[0].find.as_ref().is_some_and(|f| {
+            f.query == "o" && f.matches.len() == 2 && f.current.is_some()
+        })
+    });
+
+    let find = h.state().views[0].find.as_ref().unwrap();
+    assert_eq!(find.matches.len(), 2);
+    let initial = find.current.unwrap();
+
+    h.get_by_label_contains("Next (").scroll_to_me();
+    h.run_steps(2);
+    h.get_by_label_contains("Next (").click();
+    h.run_steps(3);
+
+    assert_eq!(
+        h.state().views[0].find.as_ref().unwrap().current,
+        Some((initial + 1) % 2),
+        "Next must advance to the next PDF match"
+    );
+
+    h.get_by_label_contains("Previous (").scroll_to_me();
+    h.run_steps(2);
+    h.get_by_label_contains("Previous (").click();
+    h.run_steps(3);
+
+    assert_eq!(
+        h.state().views[0].find.as_ref().unwrap().current,
+        Some(initial),
+        "Previous must restore the initial PDF match"
+    );
+
+    h.state_mut().views[0].open_find();
+    h.run_steps(2);
+
+    let find = h.state().views[0].find.as_ref().expect("shared Find");
+    assert!(!find.toolbar_visible);
+    assert_eq!(find.query, "o");
+    assert_eq!(find.matches.len(), 2);
 }

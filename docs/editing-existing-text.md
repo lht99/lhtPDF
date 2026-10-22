@@ -4,6 +4,11 @@ Click a text region in **Edit a PDF → Edit text and images**. One editor conta
 source rows and mixed styles. Embedded TrueType and OpenType/CFF faces are used in memory;
 source font programs, colour, size and baseline anchors stay intact. A textless preview
 prevents a second copy underneath. The frame shows the live extent as text grows or shrinks.
+Rows a text edit doesn't reach keep their original operators, so their kerning, `TJ` word
+gaps and glyph widths stay exactly as they were. Only rows whose characters changed, or that
+moved because an earlier row wrapped, are rewritten, and formatting a selection rewrites
+only the rows it covers. Changing the whole paragraph's formatting, width or position rewrites
+every row.
 
 Add Text also opens existing text when it is clicked; a blank-space click starts a new item.
 Both text tools retype an added text item with one click. Draft boxes grow to the page edge
@@ -50,6 +55,12 @@ ActualText already supplies typing order, so the editor preserves it without app
 a second bidi reversal; adjacent visual glyph runs still recover their own reading order.
 Only right-to-left ActualText is kept apart this way: left-to-right spans, such as the Latin
 ligatures (`fi`, `fl`) Word and Chrome wrap in ActualText mid-word, join their line as before.
+
+A justified paragraph stretches each row but its last to the paragraph's width by widening its
+spaces. Word spacing (`Tw`) widens only single-byte code 32, so where the font shows a space with
+another code (a composite font, the generated Type 3 fallback) each space is followed by a `TJ`
+adjustment instead. Justifying a paragraph with several formats in it is not supported yet: it is
+left-aligned.
 
 For headless editing, use `text_font_files` → `text_font_import` → `text_fonts` and pass a
 resource to `text_edit.font_resource`. `text_edit.ranges` holds selected range formatting.

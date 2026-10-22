@@ -1,4 +1,4 @@
-//! `pdfcraft-cli ui --control FILE`: commands go only to an app whose control file is plausibly
+//! `lhtPDF-cli ui --control FILE`: commands go only to an app whose control file is plausibly
 //! the user's own. Another local user can create a file at a shared path such as `/tmp/pc.json`
 //! first, naming their own port and token; the CLI must not then send them typed text or trust
 //! their replies.
@@ -29,7 +29,7 @@ impl Drop for Scratch {
 }
 
 fn scratch(test: &str) -> Scratch {
-    let dir = std::env::temp_dir().join(format!("pdfcraft-cli-ui-{test}-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("lhtPDF-cli-ui-{test}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     Scratch(dir)

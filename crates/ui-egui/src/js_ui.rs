@@ -260,25 +260,33 @@ fn reading_mode_label(mode: &str) -> &'static str {
     }
 }
 
-/// Preferences: interface language and size, appearance, identity and JavaScript.
+/// Preferences: interface language and size, appearance, identity and JavaScript. Returns `true` to close.
 pub(crate) fn preferences_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) -> bool {
     ui.label(egui::RichText::new(tl!("Preferences")).font(theme::semibold(18.0)));
     ui.horizontal(|ui| {
         ui.label(tl!("Interface language"));
-        let before = app.language.clone();
         let selected = crate::i18n::Lang::from_code(&app.language).map_or(tl!("Auto"), crate::i18n::Lang::name);
-
-        egui::ComboBox::from_id_salt("preferences-interface-language").selected_text(selected).show_ui(ui, |ui| {
-            for language in crate::i18n::Lang::all() {
-                if matches!(language.code(), "en" | "vi") && ui.selectable_label(app.language == language.code(), language.name()).clicked() {
-                    app.language = language.code().to_string();
+        // Do not edit app.language directly: the shared setter persists EN/VI.
+        let mut requested = app.language.clone();
+        egui::ComboBox::from_id_salt("interface-language").selected_text(selected).show_ui(ui, |ui| {
+            if ui.selectable_value(&mut requested, crate::i18n::AUTO.to_string(), tl!("Auto")).clicked() {
+                ui.close();
+            }
+            for language in ["en", "vi"].into_iter().filter_map(crate::i18n::Lang::from_code) {
+                if ui.selectable_value(&mut requested, language.code().to_string(), language.name()).clicked() {
                     ui.close();
                 }
             }
         });
-        // Relabel the rest of this dialog in the new language right away, not next frame.
-        if app.language != before {
-            crate::i18n::set_current(crate::i18n::Lang::from_pref(&app.language));
+        if requested != app.language {
+            match app.set_interface_language(&requested) {
+                Ok(()) => {
+                    // Relabel Preferences immediately, not on the next frame.
+                    crate::i18n::set_current(crate::i18n::Lang::from_pref(&app.language));
+                    ui.ctx().request_repaint();
+                }
+                Err(error) => app.notify(format!("Could not save interface language: {error}")),
+            }
         }
     });
     ui.horizontal(|ui| {
@@ -376,12 +384,12 @@ pub(crate) fn preferences_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tok
     ui.label(egui::RichText::new(tl!("For page sizes and margins.")).small().color(t.text_muted));
     // The web build has no file paths to reopen.
     #[cfg(not(target_arch = "wasm32"))]
-    ui.add(widgets::checkbox(&mut app.reopen_last_session, tl!("Reopen the files that were open when lhtPDF last closed")));
+    ui.add(widgets::checkbox(&mut app.reopen_last_session, tl!("Reopen the files that were open when PdfCraft last closed")));
     // The web build has no files on disk to watch.
     #[cfg(not(target_arch = "wasm32"))]
     ui.add(widgets::checkbox(&mut app.reload_changed_files, tl!("Reload documents when their files change on disk")));
     ui.horizontal(|ui| {
-        ui.label(tl!("Mouse wheel scroll speed"));
+        ui.label(tl!("Scroll speed (mouse wheel and arrow keys)"));
         for speed in crate::scroll_speed::ScrollSpeed::ALL {
             widgets::radio_value(ui, &mut app.scroll_speed, speed, tl_ctx!("scroll speed", speed.label()));
         }
@@ -404,47 +412,39 @@ pub(crate) fn preferences_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tok
     // remapped while rendering, and the page clears to the background colour. The preference
     // is app-wide: every open document follows it, and documents open with it.
     ui.label(egui::RichText::new(tl!("Reading colours")).font(theme::semibold(13.0)));
-    ui.horizontal_wrapped(|ui| {
+    ui.horizontal(|ui| {
         ui.label(tl!("Replace document colours"));
-
         let mode = app.reading_colors.mode_name();
-
-        for (m, label) in [
-            ("off", "Off"),
-            ("black-on-white", "Black on white"),
-            ("white-on-black", "White on black"),
-            ("yellow-on-black", "Yellow on black"),
-            ("green-on-black", "Green on black"),
-            ("custom", "Custom"),
-        ] {
-            if ui.selectable_label(mode == m, tl!(label)).clicked() {
-                match m {
-                    "off" => {
-                        app.set_reading_colors(
-                            pdfcraft_render::ReadingColors::default()
-                        );
-                    }
-                    "custom" => {
-                        let colors = app.reading_colors.params.map_or(
-                            pdfcraft_render::ReadingColors::BLACK_ON_WHITE,
-                            |params| pdfcraft_render::ReadingColors {
-                                params: Some(params)
-                            },
-                        );
-                        app.set_reading_colors(colors);
-                    }
-                    preset => {
-                        if let Ok(colors) =
-                            pdfcraft_render::ReadingColors::parse(
-                                preset, None, None, None, None
-                            )
-                        {
+        egui::ComboBox::from_id_salt("reading-colors").selected_text(tl!(reading_mode_label(mode))).show_ui(ui, |ui| {
+            for (m, label) in [
+                ("off", "Off"),
+                ("black-on-white", "Black on white"),
+                ("white-on-black", "White on black"),
+                ("yellow-on-black", "Yellow on black"),
+                ("green-on-black", "Green on black"),
+                ("custom", "Custom"),
+            ] {
+                if ui.selectable_label(mode == m, tl!(label)).clicked() {
+                    match m {
+                        "off" => app.set_reading_colors(pdfcraft_render::ReadingColors::default()),
+                        "custom" => {
+                            // Custom starts from the colours already chosen, or black on white.
+                            let colors = app.reading_colors.params.map_or(pdfcraft_render::ReadingColors::BLACK_ON_WHITE, |params| {
+                                pdfcraft_render::ReadingColors { params: Some(params) }
+                            });
                             app.set_reading_colors(colors);
                         }
+                        // `parse` knows these names; a preset comes with its own flags.
+                        preset => {
+                            if let Ok(colors) = pdfcraft_render::ReadingColors::parse(preset, None, None, None, None) {
+                                app.set_reading_colors(colors);
+                            }
+                        }
                     }
+                    ui.close();
                 }
             }
-        }
+        });
     });
     if app.reading_colors.params.is_some() {
         let mut changed = false;
@@ -474,6 +474,7 @@ pub(crate) fn preferences_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tok
         let label = ui.label(tl!("Name on new comments"));
         ui.add(crate::widgets::line(&mut app.comment_prefs.author).desired_width(220.0).char_limit(crate::MAX_AUTHOR_CHARS)).labelled_by(label.id);
     });
+    ui.add(widgets::checkbox(&mut app.comment_prefs.hide_empty_highlight_hover, tl!("Hide hover previews for highlights without comment text")));
     ui.add_space(8.0);
     ui.label(egui::RichText::new(tl!("Fill & Sign")).font(theme::semibold(13.0)));
     ui.add(widgets::checkbox(&mut app.flatten_fill_sign_on_save, tl!("Flatten Fill & Sign when saving")));
@@ -497,8 +498,7 @@ pub(crate) fn preferences_body(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tok
         );
     });
     ui.add_space(10.0);
-
-    false
+    buttons(ui, tl!("OK"), &[]).is_some()
 }
 
 /// Preferences ▸ Date format: a preset, or any pattern typed in, for Fill & Sign dates, and the
@@ -509,24 +509,22 @@ fn date_format(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) {
     ui.label(egui::RichText::new(tl!("Date format")).font(theme::semibold(13.0)));
     let sample = |app: &PdfCraftApp, f: &str| format!("{}   {f}", app.date_text(Some(f)).unwrap_or_default());
     ui.horizontal(|ui| {
-        ui.label(tl!("Fill & Sign dates"));
-
+        let label = ui.label(tl!("Fill & Sign dates"));
         let current = app.session.date_format().to_string();
-        let selected = sample(app, &current);
-
-        egui::ComboBox::from_id_salt("preferences-date-format")
+        let selected = if DATE_FORMATS.contains(&current.as_str()) { sample(app, &current) } else { tl!("Custom").to_string() };
+        egui::ComboBox::from_id_salt("date-format")
             .selected_text(selected)
-            .width(290.0)
+            .width(240.0)
             .show_ui(ui, |ui| {
                 for f in DATE_FORMATS {
-                    if ui.selectable_label(current == f, sample(app, f)).clicked() {
-                        if app.session.set_date_format(f).is_ok() {
-                            app.date_format_draft = None;
-                        }
+                    if ui.selectable_label(current == f, sample(app, f)).clicked() && app.session.set_date_format(f).is_ok() {
+                        app.date_format_draft = None;
                         ui.close();
                     }
                 }
-            });
+            })
+            .response
+            .labelled_by(label.id);
     });
     ui.horizontal(|ui| {
         let label = ui.label(tl!("Pattern"));
@@ -561,21 +559,28 @@ fn date_format(ui: &mut egui::Ui, app: &mut PdfCraftApp, t: &Tokens) {
         );
     }
     ui.horizontal(|ui| {
-        ui.label(tl!("Language"));
+        let label = ui.label(tl!("Language"));
         let interface = crate::i18n::current().name();
         let follow = crate::i18n::fmt(tl!("Same as interface ({language})"), &[("language", interface)]);
         let current = app.session.date_language().map(str::to_string);
-        ui.horizontal_wrapped(|ui| {
-            if ui.selectable_label(current.is_none(), follow.as_str()).clicked() {
-                let _ = app.session.set_date_language(None);
-            }
-
-            for l in DATE_LANGUAGES.iter().filter(|l| matches!(l.code, "en" | "vi")) {
-                if ui.selectable_label(current.as_deref() == Some(l.code), l.name).clicked() {
-                    let _ = app.session.set_date_language(Some(l.code));
+        let selected = DATE_LANGUAGES.iter().find(|l| current.as_deref() == Some(l.code)).map_or(follow.clone(), |l| l.name.to_string());
+        egui::ComboBox::from_id_salt("date-language")
+            .selected_text(selected)
+            .width(240.0)
+            .show_ui(ui, |ui| {
+                if ui.selectable_label(current.is_none(), follow).clicked() && app.session.set_date_language(None).is_ok() {
+                    ui.close();
                 }
-            }
-        });
+                for l in &DATE_LANGUAGES {
+                    if ui.selectable_label(current.as_deref() == Some(l.code), l.name).clicked()
+                        && app.session.set_date_language(Some(l.code)).is_ok()
+                    {
+                        ui.close();
+                    }
+                }
+            })
+            .response
+            .labelled_by(label.id);
     });
     ui.label(
         egui::RichText::new(crate::i18n::fmt(
