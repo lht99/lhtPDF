@@ -576,6 +576,70 @@ pub(crate) fn scroll_menu(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui)) {
     egui::ScrollArea::vertical().max_height(height).auto_shrink([true, true]).show(ui, add);
 }
 
+/// Fixed horizontal drawing tools for the Edit PDF workspace.
+fn shapes_edit_toolbar(app: &mut PdfCraftApp, ui: &mut egui::Ui, available: f32) {
+    use crate::comments::CommentTool;
+    use crate::QuickTool;
+
+    const TOOLS: &[CommentTool] = &[
+        CommentTool::Line,
+        CommentTool::Arrow,
+        CommentTool::Rectangle,
+        CommentTool::Oval,
+        CommentTool::Ink,
+        CommentTool::Polygon,
+        CommentTool::PolyLine,
+        CommentTool::Cloud,
+        CommentTool::Callout,
+    ];
+
+    // Reserve space for Select, separators, More and the complete style bar.
+    // Prefer keeping style controls visible over showing additional tools.
+    let reserved = if let QuickTool::Comment(tool) = app.quick_tool {
+        290.0 + if tool.has_fill() { 36.0 } else { 0.0 }
+    } else {
+        120.0
+    };
+
+    let slots = ((available - reserved) / 36.0).floor().max(0.0) as usize;
+    let visible_count = slots.min(TOOLS.len());
+
+    ui.horizontal_centered(|ui| {
+        ui.spacing_mut().item_spacing.x = 4.0;
+
+        let selected = app.quick_tool == QuickTool::Select;
+        if icons::button(ui, "mouse-pointer-2", 32.0, selected, tl!("Select (V)")).clicked() {
+            app.quick_tool = QuickTool::Select;
+        }
+
+        ui.separator();
+
+        for &tool in &TOOLS[..visible_count] {
+            let selected = app.quick_tool == QuickTool::Comment(tool);
+            if icons::button(ui, tool.icon(), 32.0, selected, tl!(tool.label())).clicked() {
+                app.execute(tool.command());
+            }
+        }
+
+        if visible_count < TOOLS.len() {
+            ui.menu_button(tl!("More"), |ui| {
+                for &tool in &TOOLS[visible_count..] {
+                    let selected = app.quick_tool == QuickTool::Comment(tool);
+                    if ui.selectable_label(selected, tl!(tool.label())).clicked() {
+                        app.execute(tool.command());
+                        ui.close();
+                    }
+                }
+            });
+        }
+
+        ui.separator();
+
+        if let QuickTool::Comment(tool) = app.quick_tool {
+            crate::comments::quick_bar_controls(ui, tool, &mut app.comment_prefs);
+        }
+    });
+}
 pub fn pdf_action_toolbar(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     ui.horizontal_centered(|ui| {
         ui.spacing_mut().item_spacing.x = 4.0;
@@ -944,6 +1008,28 @@ pub fn right_rail(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     });
                 });
         });
+    // Fixed drawing toolbar below the PDF viewer toolbar in Edit mode.
+    if app.mode == Mode::Edit {
+        egui::Panel::top("pdf_edit_shapes_toolbar")
+            .exact_size(48.0)
+            .frame(
+                egui::Frame::NONE
+                    .fill(t.chrome)
+                    .inner_margin(egui::Margin::symmetric(8, 4))
+                    .stroke(Stroke::new(1.0, t.divider)),
+            )
+            .show(ui, |ui| {
+                // Measure the viewport before entering the horizontal ScrollArea.
+                let available = ui.available_width();
+                egui::ScrollArea::horizontal()
+                    .id_salt("pdf_edit_shapes_toolbar_scroll")
+                    .auto_shrink([false, true])
+                    .show(ui, |ui| {
+                        shapes_edit_toolbar(app, ui, available);
+                    });
+            });
+    }
+
 }
 
 /// View ▸ Page display and the rail's Page display menu: the layouts and the cover page.
@@ -1006,6 +1092,7 @@ fn rail_view_menu(ui: &mut egui::Ui, view: &mut DocView) -> Option<&'static str>
         ui.close();
     }
     picked
+
 }
 
 #[cfg(test)]
@@ -1091,4 +1178,5 @@ mod tab_widths {
         // `egui::Margin` is in `i8`.
         assert!(MAC_CONTENT_LEFT <= f32::from(i8::MAX));
     }
+
 }
