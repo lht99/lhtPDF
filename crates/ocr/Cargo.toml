@@ -14,5 +14,5 @@ workspace = true
 image = { version = "0.25", default-features = false, features = ["png"] }
 pdfcraft-fonts = { workspace = true }
 ocrs = { version = "0.13.1", default-features = false, features = ["rten"] }
-rten = { version = "0.26.0", default-features = false, features = ["rten_format"] }
+rten = { version = "0.27.0", default-features = false, features = ["rten_format"] }
 thiserror.workspace = true
