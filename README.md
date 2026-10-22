@@ -55,8 +55,8 @@ Một số chức năng phụ thuộc vào phiên bản ứng dụng và các th
 <!-- LHTPDF_DOWNLOAD_START -->
 | Tệp | Mô tả |
 | --- | --- |
-| [Tải MSI Installer](https://github.com/lht99/lhtPDF/releases/download/v26.10.22/lhtPDF-26.10.22-windows-x64.msi) | Cài đặt lhtPDF trên Windows |
-| [Tải Portable ZIP](https://github.com/lht99/lhtPDF/releases/download/v26.10.22/lhtPDF-26.10.22-windows-x64-portable.zip) | Giải nén và chạy ứng dụng |
+| [Tải MSI Installer](https://github.com/lht99/lhtPDF/releases/download/26.10.22/lhtPDF-26.10.22-windows-x64.msi) | Cài đặt lhtPDF trên Windows |
+| [Tải Portable ZIP](https://github.com/lht99/lhtPDF/releases/download/26.10.22/lhtPDF-26.10.22-windows-x64-portable.zip) | Giải nén và chạy ứng dụng |
 <!-- LHTPDF_DOWNLOAD_END -->
 
 ### Lưu ý Windows SmartScreen
@@ -68,13 +68,13 @@ Chỉ tải phần mềm từ kho GitHub chính thức hoặc website dự án. 
 ## Lịch sử phát hành
 
 <!-- LHTPDF_RELEASE_HISTORY_START -->
-### [v26.10.22](https://github.com/lht99/lhtPDF/releases/tag/v26.10.22) — 2026-10-22 (Stable)
+### [26.10.22](https://github.com/lht99/lhtPDF/releases/tag/26.10.22) — 2026-10-22 (Stable)
 
 - Phiên bản lhtPDF 26.10.22 tập trung cập nhật nhận diện thương hiệu, cải thiện khả năng chỉnh sửa văn bản tiếng Việt trong tài liệu PDF và khắc phục một số lỗ...
 - 1. Cập nhật nhận diện lhtPDF
 - Đồng bộ tên ứng dụng, biểu tượng và thông tin sản phẩm theo thương hiệu lhtPDF.
-- [Tải MSI](https://github.com/lht99/lhtPDF/releases/download/v26.10.22/lhtPDF-26.10.22-windows-x64.msi)
-- [Tải Portable ZIP](https://github.com/lht99/lhtPDF/releases/download/v26.10.22/lhtPDF-26.10.22-windows-x64-portable.zip)
+- [Tải MSI](https://github.com/lht99/lhtPDF/releases/download/26.10.22/lhtPDF-26.10.22-windows-x64.msi)
+- [Tải Portable ZIP](https://github.com/lht99/lhtPDF/releases/download/26.10.22/lhtPDF-26.10.22-windows-x64-portable.zip)
 
 ### [26.10.21](https://github.com/lht99/lhtPDF/releases/tag/26.10.21) — 2026-10-20 (Stable)
 
