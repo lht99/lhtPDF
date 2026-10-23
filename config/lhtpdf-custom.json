@@ -507,5 +507,46 @@
                      "preserveDiscordInsideAbout":  false,
                      "preserveSupportTopButton":  true,
                      "validation":  "NOT_VERIFIED"
-                 }
+                 },
+    "personalizationBaseline":  {
+                                    "schemaVersion":  1,
+                                    "baselineName":  "lhtPDF 26.10.24",
+                                    "upstreamVersion":  "0.13.0",
+                                    "sourceCommit":  "0a60158031becf842bdd821465d971ea935a4a5c",
+                                    "status":  "CANDIDATE_PENDING_VALIDATION",
+                                    "policy":  {
+                                                   "upstreamCoreIsAuthoritative":  true,
+                                                   "personalizationOverridesUpstream":  true,
+                                                   "neverRestoreRemovedComponents":  true,
+                                                   "neverDuplicateUpstreamFeatures":  true,
+                                                   "requireReviewForUnknownChanges":  true,
+                                                   "requireRegressionValidation":  true,
+                                                   "autoPromote":  false
+                                               },
+                                    "requiredComponents":  [
+                                                               "lhtpdf-branding",
+                                                               "horizontal-menu",
+                                                               "pdf-horizontal-toolbar",
+                                                               "inline-search",
+                                                               "edit-shapes-horizontal-toolbar",
+                                                               "lhtpdf-support-top-button",
+                                                               "interface-languages-en-vi",
+                                                               "windows-installer-identity",
+                                                               "portable-lhtpdf-data",
+                                                               "lhtpdf-updater",
+                                                               "upstream-ocr-and-fonts"
+                                                           ],
+                                    "removedComponents":  [
+                                                              "discord-about-link",
+                                                              "discord-top-toolbar-button",
+                                                              "vertical-pdf-toolbar"
+                                                          ],
+                                    "validation":  {
+                                                       "centralAudit":  "NOT_VERIFIED",
+                                                       "uiRegression":  "NOT_VERIFIED",
+                                                       "upstreamRegression":  "NOT_VERIFIED",
+                                                       "windowsInstaller":  "NOT_VERIFIED",
+                                                       "portable":  "NOT_VERIFIED"
+                                                   }
+                                }
 }
