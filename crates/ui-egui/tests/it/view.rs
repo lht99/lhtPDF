@@ -1027,9 +1027,7 @@ fn view_menu_page_display_uses_the_same_commands() {
     use egui_kittest::kittest::Queryable;
     let mut h = harness(&[]);
     h.run_steps(4);
-    h.get_by_label("Menu").click();
-    h.run_steps(2);
-    h.get_by_label("View ⏵").hover();
+    h.get_by_label("View").click();
     h.run_steps(3);
     h.get_by_label("Single page").click();
     h.run_steps(4);
@@ -1950,9 +1948,7 @@ fn long_view_menu_fits_a_short_window() {
         app
     });
     h.run_steps(8);
-    h.get_by_label("Menu").click();
-    h.run_steps(2);
-    h.get_by_label("View ⏵").hover();
+    h.get_by_label("View").click();
     h.run_steps(4);
     let before = h.get_by_label("Side panels ⏵").rect().bottom();
     h.get_by_label("Fit to height ").hover();

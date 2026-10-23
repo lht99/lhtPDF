@@ -66,8 +66,8 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     app.active = None;
                     app.combine_tab.focused = false;
                 }
-                // Keep the two icon buttons, Discord's text/padding and three gaps outside the scrolling tabs.
-                let controls_width = ui.fonts_mut(|f| f.layout_no_wrap("Discord".into(), theme::medium(13.0), t.text).size().x)
+                // Reserve the Support label, two icon buttons and layout gaps outside the scrolling tabs.
+                let controls_width = ui.fonts_mut(|f| f.layout_no_wrap("Support".into(), theme::medium(13.0), t.text).size().x)
                     + 2.0 * button
                     + 50.0
                     + window_controls::width(&controls.right);
@@ -299,9 +299,9 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     if icons::button(ui, "circle-help", button, false, tl!("Keyboard shortcuts")).clicked() {
                         app.dialog = Some(Dialog::Shortcuts);
                     }
-                    // One click to the community, from anywhere in the app.
-                    if widgets::ghost_button_sized(ui, "messages-square", "Discord", tab_h).on_hover_text(pdfcraft_engine::links::DISCORD).clicked() {
-                        app.execute("help.discord");
+                    // lhtPDF support, available from anywhere in the app.
+                    if widgets::ghost_button_sized(ui, "messages-square", "Support", tab_h).on_hover_text("https://letuan.io.vn").clicked() {
+                        app.open_url("https://letuan.io.vn");
                     }
                 });
             });
@@ -488,6 +488,58 @@ fn tab(
     })
 }
 
+pub fn main_menu_bar(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
+    let t = Tokens::get(ui.ctx());
+    egui::Panel::top("lhtpdf_main_menu")
+        .exact_size(36.0)
+        .frame(
+            egui::Frame::NONE
+                .fill(t.chrome)
+                .inner_margin(egui::Margin::symmetric(12, 0))
+                .stroke(Stroke::new(1.0, t.divider)),
+        )
+        .show(ui, |ui| {
+            ui.horizontal_centered(|ui| {
+                ui.spacing_mut().item_spacing.x = 8.0;
+                main_menu(app, ui);
+                ui.separator();
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    // Interface language selector, based on the previously working
+                    // lhtPDF header menu. Keep the current preference persistence path.
+                    let selected_language = match app.language.as_str() {
+                        "vi" => "VI",
+                        "en" => "EN",
+                        _ => "Auto",
+                    };
+                    ui.menu_button(selected_language, |ui| {
+                        for (code, label) in [
+                            ("auto", "Auto"),
+                            ("en", "English"),
+                            ("vi", "Tiếng Việt"),
+                        ] {
+                            if ui.selectable_label(app.language == code, label).clicked() {
+                                match app.set_interface_language(code) {
+                                    Ok(()) => {
+                                        crate::i18n::set_current(
+                                            crate::i18n::Lang::from_pref(&app.language),
+                                        );
+                                        ui.ctx().request_repaint();
+                                    }
+                                    Err(error) => {
+                                        app.notify(format!(
+                                            "Could not save interface language: {error}"
+                                        ));
+                                    }
+                                }
+                                ui.close();
+                            }
+                        }
+                    }).response.on_hover_text(tl!("Interface language"));
+                });
+            });
+        });
+}
+
 pub fn mode_bar(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
     egui::Panel::top("mode_bar")
@@ -496,7 +548,6 @@ pub fn mode_bar(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
         .show(ui, |ui| {
             ui.horizontal_centered(|ui| {
                 ui.spacing_mut().item_spacing.x = 2.0;
-                main_menu(app, ui);
                 ui.add_space(6.0);
                 ui.painter().vline(ui.cursor().left(), ui.max_rect().y_range().shrink(12.0), Stroke::new(1.0, t.divider));
                 ui.add_space(10.0);
@@ -547,10 +598,6 @@ pub(crate) fn scroll_menu(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui)) {
 
 fn main_menu(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
-    let resp = widgets::ghost_button(ui, "panel-left", tl!("Menu"));
-    egui::Popup::menu(&resp).show(|ui| {
-        scroll_menu(ui, |ui| {
-            ui.set_min_width(230.0);
             ui.menu_button(tl!("File"), |ui| scroll_menu(ui, |ui| crate::commands::registry_menu(app, ui, "File")));
             ui.menu_button(tl!("Edit"), |ui| scroll_menu(ui, |ui| crate::commands::registry_menu(app, ui, "Edit")));
             ui.menu_button(tl!("Pages"), |ui| scroll_menu(ui, |ui| crate::commands::registry_menu(app, ui, "Pages")));
@@ -607,6 +654,10 @@ fn main_menu(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                         ui.separator();
                     }
                     crate::commands::registry_menu(app, ui, "View");
+                    ui.separator();
+                    if ui.add(widgets::checkbox(&mut app.pdf_toolbar_visible, tl!("Show PDF toolbar"))).clicked() {
+                        ui.close();
+                    }
                     ui.menu_button(tl!("Display theme"), |ui| theme_menu(app, ui));
                     ui.menu_button(tl!("Side panels"), |ui| {
                         scroll_menu(ui, |ui| {
@@ -631,8 +682,81 @@ fn main_menu(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     });
                 })
             });
-            ui.menu_button(tl!("Help"), |ui| scroll_menu(ui, |ui| crate::commands::registry_menu(app, ui, "Help")));
-        })
+            ui.menu_button(tl!("Help"), |ui| {
+                scroll_menu(ui, |ui| {
+                    if ui.button(tl!("About lhtPDF")).clicked() {
+                        app.execute("help.about");
+                        ui.close();
+                    }
+                    if ui.button(tl!("Check for updates…")).clicked() {
+                        app.execute("help.check_updates");
+                        ui.close();
+                    }
+                });
+            });
+}
+
+fn shapes_edit_toolbar(app: &mut PdfCraftApp, ui: &mut egui::Ui, available: f32) {
+    use crate::comments::CommentTool;
+    use crate::QuickTool;
+
+    const TOOLS: &[CommentTool] = &[
+        CommentTool::Line,
+        CommentTool::Arrow,
+        CommentTool::Rectangle,
+        CommentTool::Oval,
+        CommentTool::Ink,
+        CommentTool::Polygon,
+        CommentTool::PolyLine,
+        CommentTool::Cloud,
+        CommentTool::Callout,
+    ];
+
+    // Reserve space for Select, separators, More and the complete style bar.
+    // Prefer keeping style controls visible over showing additional tools.
+    let reserved = if let QuickTool::Comment(tool) = app.quick_tool {
+        290.0 + if tool.has_fill() { 36.0 } else { 0.0 }
+    } else {
+        120.0
+    };
+
+    let slots = ((available - reserved) / 36.0).floor().max(0.0) as usize;
+    let visible_count = slots.min(TOOLS.len());
+
+    ui.horizontal_centered(|ui| {
+        ui.spacing_mut().item_spacing.x = 4.0;
+
+        let selected = app.quick_tool == QuickTool::Select;
+        if icons::button(ui, "mouse-pointer-2", 32.0, selected, tl!("Select (V)")).clicked() {
+            app.quick_tool = QuickTool::Select;
+        }
+
+        ui.separator();
+
+        for &tool in &TOOLS[..visible_count] {
+            let selected = app.quick_tool == QuickTool::Comment(tool);
+            if icons::button(ui, tool.icon(), 32.0, selected, tl!(tool.label())).clicked() {
+                app.execute(tool.command());
+            }
+        }
+
+        if visible_count < TOOLS.len() {
+            ui.menu_button(tl!("More"), |ui| {
+                for &tool in &TOOLS[visible_count..] {
+                    let selected = app.quick_tool == QuickTool::Comment(tool);
+                    if ui.selectable_label(selected, tl!(tool.label())).clicked() {
+                        app.execute(tool.command());
+                        ui.close();
+                    }
+                }
+            });
+        }
+
+        ui.separator();
+
+        if let QuickTool::Comment(tool) = app.quick_tool {
+            crate::comments::quick_bar_controls(ui, tool, &mut app.comment_prefs);
+        }
     });
 }
 
@@ -651,18 +775,48 @@ pub fn right_rail(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     );
     let page_count = doc.info.pages.len();
     let labels: Vec<String> = doc.info.pages.iter().map(|p| p.label.clone()).collect();
-    egui::Panel::right("rail")
+    egui::Panel::top("pdf_viewer_toolbar")
         .resizable(false)
-        .exact_size(48.0)
-        .frame(egui::Frame::NONE.fill(t.chrome).inner_margin(egui::Margin::symmetric(6, 8)).stroke(Stroke::new(1.0, t.divider)))
+        .exact_size(56.0)
+        .frame(egui::Frame::NONE.fill(t.chrome).inner_margin(egui::Margin::symmetric(8, 4)).stroke(Stroke::new(1.0, t.divider)))
         .show(ui, |ui| {
+            let mut page_display = None;
+            egui::ScrollArea::horizontal()
+                .id_salt("pdf_viewer_toolbar_scroll")
+                .auto_shrink([false, true])
+                .show(ui, |ui| {
+                    ui.horizontal_centered(|ui| {
+                        ui.spacing_mut().item_spacing.x = 3.0;
+                        // lhtPDF 26.10.23: document actions, preserving upstream navigation.
+                        if app.active.is_some() {
+                            let tip = crate::commands::command_tip(
+                                ui.ctx(), tl!("Document properties ({key})"), "file.properties"
+                            );
+                            if icons::button(ui, "info", 42.0, false, &tip).clicked() {
+                                app.dialog = Some(Dialog::Properties(PropsTab::Description));
+                            }
+
+                            let tip = crate::commands::command_tip(
+                                ui.ctx(), tl!("Save ({key})"), "file.save"
+                            );
+                            if icons::button(ui, "save", 42.0, false, &tip).clicked() {
+                                app.run_command("file.save");
+                            }
+
+                            let tip = crate::commands::command_tip(
+                                ui.ctx(), tl!("Print ({key})"), "print.dialog"
+                            );
+                            if icons::button(ui, "printer", 42.0, false, &tip).clicked() {
+                                app.run_command("print.dialog");
+                            }
+                            ui.separator();
+                        }
             // Page navigation cluster at the bottom (as in Acrobat's rail). It is a panel of its own so
             // that in a short window the buttons above scroll instead of running into it (#3282).
             let view = &mut app.views[index];
-            let mut page_display = None;
-            egui::Panel::bottom("rail-nav").frame(egui::Frame::NONE).show_separator_line(false).resizable(false).show(ui, |ui| {
-                ui.with_layout(Layout::bottom_up(Align::Center), |ui| {
-                    ui.spacing_mut().item_spacing.y = 2.0;
+            {
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 2.0;
                     let tip = crate::commands::key_tip(ui.ctx(), tl!("Zoom out ({key})"), crate::commands::ZOOM_OUT);
                     if icons::button(ui, "zoom-out", 32.0, false, &tip).clicked() {
                         view.zoom_step(false);
@@ -739,7 +893,7 @@ pub fn right_rail(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     }
                     let font = theme::regular(11.0);
                     let mut position = page_position(view.current, page_count, labels.get(view.current).map_or("", String::as_str));
-                    if widgets::text_width(ui, &position, &font) > ui.available_width() {
+                    if widgets::text_width(ui, &position, &font) > 120.0 {
                         position = page_count.to_string();
                     }
                     // Out of range (an empty document), like `page_position`: "Page 0 of 0", never past the end.
@@ -781,9 +935,62 @@ pub fn right_rail(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                         view.page_input = view.current_page_label(labels.get(view.current).map(String::as_str));
                     }
                 });
-            });
-            egui::ScrollArea::vertical().id_salt("rail-panels").show(ui, |ui| {
-                ui.spacing_mut().item_spacing.y = 4.0;
+            }
+
+            // lhtPDF 26.10.23: inline search backed by upstream Find.
+            {
+                let view = &mut app.views[index];
+                let was_visible = view.find.as_ref().is_some_and(|f| f.toolbar_visible);
+
+                if icons::button(ui, "search", 34.0, was_visible, tl!("Find text")).clicked() {
+                    if was_visible {
+                        if let Some(find) = view.find.as_mut() {
+                            find.toolbar_visible = false;
+                        }
+                    } else {
+                        let find = view.find.get_or_insert_with(Default::default);
+                        find.toolbar_visible = true;
+                        find.in_panel = false;
+                        find.focus = false;
+                        ui.ctx().memory_mut(|m| {
+                            m.request_focus(egui::Id::new("pdf-toolbar-find"))
+                        });
+                    }
+                }
+
+                if let Some(find) = view.find.as_mut().filter(|f| f.toolbar_visible) {
+                    let mut step = None;
+                    let response = ui.add(
+                        egui::TextEdit::singleline(&mut find.query)
+                            .id(egui::Id::new("pdf-toolbar-find"))
+                            .hint_text(tl!("Find text"))
+                            .desired_width(150.0)
+                    );
+
+                    let current = find.current.map(|i| i + 1).unwrap_or(0);
+                    ui.label(format!("{current} / {}", find.matches.len()));
+
+                    if icons::button(ui, "chevron-up", 24.0, false, tl!("Previous")).clicked() {
+                        step = Some(false);
+                    }
+                    if icons::button(ui, "chevron-down", 24.0, false, tl!("Next")).clicked() {
+                        step = Some(true);
+                    }
+
+                    let changed = response.changed();
+
+                    if changed {
+                        view.rerun_find();
+                    }
+                    if let Some(forward) = step {
+                        view.find_step(forward);
+                    }
+                }
+            }
+
+            ui.separator();
+            {
+                ui.spacing_mut().item_spacing.x = 4.0;
                 let mut rail_button = |ui: &mut egui::Ui, panel: RightPanel, icon: &str, tip: &str, has: bool| {
                     let selected = app.right == Some(panel) && (app.mode == Mode::Read || app.docking.exposed(crate::docking::Panel::Inspector));
                     let r = icons::button(ui, icon, 34.0, selected, tl!(tip));
@@ -806,11 +1013,33 @@ pub fn right_rail(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     rail_button(ui, RightPanel::Accessibility, "accessibility", "Accessibility Checker", false);
                 }
                 rail_button(ui, RightPanel::Tags, "tag", "Tags", false);
-            });
+            }
+                    });
+                });
             if let Some(id) = page_display {
                 app.execute(id);
             }
         });
+    // lhtPDF 26.10.23: dedicated Shape toolbar in Edit mode.
+    if app.mode == Mode::Edit {
+        egui::Panel::top("pdf_edit_shapes_toolbar")
+            .exact_size(48.0)
+            .frame(
+                egui::Frame::NONE
+                    .fill(t.chrome)
+                    .inner_margin(egui::Margin::symmetric(8, 4))
+                    .stroke(Stroke::new(1.0, t.divider)),
+            )
+            .show(ui, |ui| {
+                let available = ui.available_width();
+                egui::ScrollArea::horizontal()
+                    .id_salt("pdf_edit_shapes_toolbar_scroll")
+                    .auto_shrink([false, true])
+                    .show(ui, |ui| {
+                        shapes_edit_toolbar(app, ui, available);
+                    });
+            });
+    }
 }
 
 /// What the rail shows under the page box: the page count, or, when the current page's label is

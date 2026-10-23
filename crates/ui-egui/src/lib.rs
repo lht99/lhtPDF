@@ -136,6 +136,7 @@ pub(crate) const MAX_AUTHOR_CHARS: usize = 200;
 #[cfg(not(target_arch = "wasm32"))]
 mod open_worker;
 mod organize_panel;
+pub mod language_registry;
 pub mod portable;
 mod protect;
 mod recovery;
@@ -505,6 +506,8 @@ pub struct PdfCraftApp {
     pub mode: Mode,
     /// Workspace used for newly opened PDFs; independent of PDF Initial View metadata.
     pub default_mode: Mode,
+    /// Show the horizontal PDF viewer toolbar.
+    pub pdf_toolbar_visible: bool,
     /// Page display and zoom for newly opened PDFs that don't ask for their own (Preferences ▸
     /// Documents and view). Continuous scrolling at fit width by default, which never snaps
     /// between pages.
@@ -942,6 +945,7 @@ impl PdfCraftApp {
             active: None,
             mode: Mode::AllTools,
             default_mode: Mode::AllTools,
+            pdf_toolbar_visible: true,
             view_defaults: Default::default(),
             units: Default::default(),
             date_format_draft: None,
@@ -2430,6 +2434,7 @@ impl PdfCraftApp {
         v["redact_prefs"] = self.redact_defaults.to_json();
         // Set outside json! above, which is at serde_json's macro recursion limit.
         v["hide_empty_highlight_hover"] = serde_json::Value::Bool(self.comment_prefs.hide_empty_highlight_hover);
+        v["pdf_toolbar_visible"] = serde_json::Value::Bool(self.pdf_toolbar_visible);
         v["organize_zoom"] = serde_json::json!(self.organize_zoom);
         // Canonical names survive changes to the order of PAPERS and do not depend on UI language.
         v["print_paper"] = serde_json::json!(pdfcraft_engine::print::PAPERS.get(self.print_draft.paper).map(|(name, _)| *name));
@@ -2474,6 +2479,9 @@ impl PdfCraftApp {
         }
         if let Some(on) = v["reload_changed_files"].as_bool() {
             self.reload_changed_files = on;
+        }
+        if let Some(visible) = v["pdf_toolbar_visible"].as_bool() {
+            self.pdf_toolbar_visible = visible;
         }
         self.pinned.restore(&v["pinned_folders"]);
         if let Ok(preference) = serde_json::from_value::<ThemePreference>(v["theme"].clone()) {
@@ -2620,6 +2628,20 @@ impl PdfCraftApp {
     /// Apply a named view option (`--page 3`, `--panel bookmarks`, `--theme dark`, …).
     ///
     /// This is the seed of the UI control channel (M3.9): the same verbs become `ui.set` calls.
+    /// Apply an interface-language selection from the desktop UI.
+    /// EN/VI is saved per user for installed Windows copies.
+    /// Portable uses app settings only; Auto is never written to HKCU.
+    pub(crate) fn set_interface_language(&mut self, value: &str) -> Result<(), String> {
+        let language = i18n::normalize_pref(value)
+            .ok_or_else(|| format!("Unsupported interface language: {value}"))?;
+
+        if matches!(language, "en" | "vi") {
+            language_registry::write(language)?;
+        }
+
+        self.set_option("language", language)
+    }
+
     pub fn set_option(&mut self, key: &str, value: &str) -> Result<(), String> {
         let view = self.active.and_then(|i| self.views.get_mut(i));
         match (key, view) {
@@ -3330,7 +3352,7 @@ impl eframe::App for PdfCraftApp {
             .active
             .and_then(|i| crate::canvas::tab_label(self, i))
             .or_else(|| self.combine_showing().then(|| tl!("Combine files").to_owned()))
-            .map_or_else(|| "PdfCraft".to_owned(), |name| format!("{name} — PdfCraft"));
+            .map_or_else(|| "lhtPDF".to_owned(), |name| format!("{name} — lhtPDF"));
         if title != self.window_title {
             ctx.send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
             self.window_title = title;
@@ -3358,9 +3380,12 @@ impl eframe::App for PdfCraftApp {
             window_controls::resize_edges(&ctx);
         }
         chrome::tab_strip(self, ui);
+        chrome::main_menu_bar(self, ui);
         chrome::mode_bar(self, ui);
         if self.active.is_some() {
-            chrome::right_rail(self, ui);
+            if self.pdf_toolbar_visible {
+                chrome::right_rail(self, ui);
+            }
             // Read mode hides the tools, not the navigation panes: the rail stays visible
             // there, so its buttons (Bookmarks, Page thumbnails, ...) must open their panels.
             // Outside Read mode the docking workspace draws the inspector.

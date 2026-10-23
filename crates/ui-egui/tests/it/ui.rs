@@ -473,8 +473,8 @@ fn tabs_shrink_to_fit_then_arrows_step_through_them_and_open_stays_in_sight() {
         }
     });
     let open = h.get_by_label("Open").rect();
-    let discord = h.get_by_label("Discord").rect();
-    assert!(open.right() <= discord.left(), "Open {open:?} must not run under Discord {discord:?}");
+    let discord = h.get_by_label("Support").rect();
+    assert!(open.right() <= discord.left(), "Open {open:?} must not run under Support {discord:?}");
     let mut previous_right = f32::MIN;
     for i in 0..5 {
         let tab = h.get_by_label(&name(i)).rect();
@@ -498,15 +498,15 @@ fn tabs_shrink_to_fit_then_arrows_step_through_them_and_open_stays_in_sight() {
     assert_eq!(enabled(&h, "Scroll tabs right"), Some(true), "and then there is more to the right");
     let open = h.get_by_label("Open").rect();
     let right = h.get_by_label("Scroll tabs right").rect();
-    assert!(right.right() <= open.left() + 0.5 && open.right() <= h.get_by_label("Discord").rect().left());
-    // Twenty: Open stays in sight left of Discord.
+    assert!(right.right() <= open.left() + 0.5 && open.right() <= h.get_by_label("Support").rect().left());
+    // Twenty: Open stays in sight left of Support.
     for i in 0..13 {
         h.state_mut().open_bytes(&format!("more-{i:02}.pdf"), None, FIXTURE.to_vec()).unwrap();
     }
     h.run_steps(4);
     let open = h.get_by_label("Open").rect();
-    let discord = h.get_by_label("Discord").rect();
-    assert!(open.left() > 0.0 && open.right() <= discord.left(), "Open {open:?} stays in sight left of Discord {discord:?}");
+    let discord = h.get_by_label("Support").rect();
+    assert!(open.left() > 0.0 && open.right() <= discord.left(), "Open {open:?} stays in sight left of Support {discord:?}");
 }
 
 /// macOS (#789): with the integrated title bar, the strip is the 28 pt band AppKit centres the
@@ -519,7 +519,7 @@ fn the_integrated_title_bar_is_the_traffic_light_band() {
         app.open_bytes("band.pdf", None, FIXTURE.to_vec()).unwrap();
     });
     let band = 28.0;
-    for label in ["Home", "band.pdf", "Open", "Discord", "Keyboard shortcuts"] {
+    for label in ["Home", "band.pdf", "Open", "Support", "Keyboard shortcuts"] {
         let r = h.get_by_label(label).rect();
         assert!(r.top() >= 0.0 && r.bottom() <= band, "{label}: {r:?} inside the {band} pt title bar");
         assert!(r.height() >= 24.0, "{label}: {r:?} stays clickable");
@@ -1484,7 +1484,7 @@ fn the_edit_tab_turns_on_edit_text_and_images() {
     use pdfcraft_ui_egui::{Mode, QuickTool};
     let mut h = harness(|app| app.open_bytes("fixture.pdf", None, FIXTURE.to_vec()).expect("fixture opens"));
     assert_eq!(h.state().quick_tool, QuickTool::Select);
-    h.get_by_label("Edit").click();
+    h.get_all_by_label("Edit").min_by(|a, b| (a.rect().center().y - h.get_by_role_and_label(egui::accesskit::Role::Button, "All tools").rect().center().y).abs().total_cmp(&(b.rect().center().y - h.get_by_role_and_label(egui::accesskit::Role::Button, "All tools").rect().center().y).abs())).expect("Edit mode tab").click();
     h.run_steps(3);
     assert_eq!(h.state().mode, Mode::Edit);
     assert_eq!(h.state().quick_tool, QuickTool::EditText);
@@ -1493,7 +1493,7 @@ fn the_edit_tab_turns_on_edit_text_and_images() {
     assert_eq!(h.state().mode, Mode::AllTools);
     assert_eq!(h.state().quick_tool, QuickTool::Select);
     // Another tool picked inside Edit is not taken away by leaving it.
-    h.get_by_label("Edit").click();
+    h.get_all_by_label("Edit").min_by(|a, b| (a.rect().center().y - h.get_by_role_and_label(egui::accesskit::Role::Button, "All tools").rect().center().y).abs().total_cmp(&(b.rect().center().y - h.get_by_role_and_label(egui::accesskit::Role::Button, "All tools").rect().center().y).abs())).expect("Edit mode tab").click();
     h.run_steps(3);
     h.state_mut().quick_tool = QuickTool::Hand;
     h.get_by_label("Convert").click();
@@ -1507,7 +1507,7 @@ fn the_edit_tab_turns_on_edit_text_and_images() {
 fn organize_pages_from_the_edit_panel_opens_its_panel() {
     use pdfcraft_ui_egui::LeftPanel;
     let mut h = harness(|app| app.open_bytes("fixture.pdf", None, FIXTURE.to_vec()).expect("fixture opens"));
-    h.get_by_label("Edit").click();
+    h.get_all_by_label("Edit").min_by(|a, b| (a.rect().center().y - h.get_by_role_and_label(egui::accesskit::Role::Button, "All tools").rect().center().y).abs().total_cmp(&(b.rect().center().y - h.get_by_role_and_label(egui::accesskit::Role::Button, "All tools").rect().center().y).abs())).expect("Edit mode tab").click();
     h.run_steps(3);
     assert_eq!(h.state().left, LeftPanel::Tool("edit"));
     assert!(
@@ -1525,7 +1525,7 @@ fn organize_pages_from_the_edit_panel_opens_its_panel() {
 #[test]
 fn the_edit_panel_keeps_the_add_update_remove_menu() {
     let mut h = harness(|app| app.open_bytes("fixture.pdf", None, FIXTURE.to_vec()).expect("fixture opens"));
-    h.get_by_label("Edit").click();
+    h.get_all_by_label("Edit").min_by(|a, b| (a.rect().center().y - h.get_by_role_and_label(egui::accesskit::Role::Button, "All tools").rect().center().y).abs().total_cmp(&(b.rect().center().y - h.get_by_role_and_label(egui::accesskit::Role::Button, "All tools").rect().center().y).abs())).expect("Edit mode tab").click();
     h.run_steps(3);
     h.get_by_label("Watermark").click();
     h.run_steps(3);

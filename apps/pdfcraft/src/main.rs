@@ -52,9 +52,9 @@ const APP_ID: &str = "ai.storyteller.pdfcraft";
 /// The app icon (assets/app-icon/README.md). macOS gets the version on Apple's icon grid, with a
 /// transparent margin; Windows and Linux get the full-bleed tile.
 #[cfg(target_os = "macos")]
-const APP_ICON_PNG: &[u8] = include_bytes!("../../../assets/app-icon/pdfcraft-1024.png");
+const APP_ICON_PNG: &[u8] = include_bytes!("../../../assets/branding/lhtpdf-icon.png");
 #[cfg(not(target_os = "macos"))]
-const APP_ICON_PNG: &[u8] = include_bytes!("../../../assets/app-icon/hicolor/256x256/apps/ai.storyteller.pdfcraft.png");
+const APP_ICON_PNG: &[u8] = include_bytes!("../../../assets/branding/lhtpdf-icon.png");
 
 /// The app was called PrintCraft before; settings saved then are under this key.
 const LEGACY_STORAGE_KEY: &str = "printcraft";
@@ -62,6 +62,45 @@ const LEGACY_STORAGE_KEY: &str = "printcraft";
 /// The preferences folder (`app.ron`, docs/development.md). In portable mode
 /// it is `PdfCraftData` beside the executable (#157). XDG desktops use the configuration base;
 /// other platforms retain eframe's PdfCraft folder. Logs and recovery stay in the data folder.
+#[cfg(target_os = "windows")]
+fn msi_install_language() -> Option<&'static str> {
+    if pdfcraft_ui_egui::portable::data_dir().is_some() {
+        return None;
+    }
+
+    let output = std::process::Command::new("reg.exe")
+        .args([
+            "query",
+            r"HKLM\SOFTWARE\lhtPDF",
+            "/v",
+            "InstallLanguage",
+            "/reg:64",
+        ])
+        .output()
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    for line in stdout.lines() {
+        let fields: Vec<_> = line.split_whitespace().collect();
+        if fields.len() >= 3
+            && fields[0].eq_ignore_ascii_case("InstallLanguage")
+            && fields[1].eq_ignore_ascii_case("REG_SZ")
+        {
+            return match fields[2] {
+                "en" => Some("en"),
+                "vi" => Some("vi"),
+                _ => None,
+            };
+        }
+    }
+
+    None
+}
+
 fn settings_dir() -> Option<std::path::PathBuf> {
     let legacy = eframe::storage_dir("PdfCraft");
     match settings::directory(
@@ -200,6 +239,19 @@ fn main() -> eframe::Result {
                 println!("pdfcraft {}", pdfcraft_engine::build_info::version());
                 return Ok(());
             }
+            #[cfg(target_os = "windows")]
+            "--set-install-language" => {
+                let language = args.next().unwrap_or_default();
+                if !matches!(language.as_str(), "en" | "vi") {
+                    eprintln!("Invalid install language. Expected en or vi.");
+                    std::process::exit(2);
+                }
+                if let Err(error) = pdfcraft_ui_egui::language_registry::write(&language) {
+                    eprintln!("{error}");
+                    std::process::exit(1);
+                }
+                return Ok(());
+            }
             "--control" => control_file = args.next(),
             "--create-images" => create_images = true,
             "--new-window" => new_window = true,
@@ -250,7 +302,7 @@ fn main() -> eframe::Result {
     let started = Rc::new(Cell::new(false));
     let first = if choice == RendererChoice::Gl { eframe::Renderer::Glow } else { eframe::Renderer::Wgpu };
     let result = eframe::run_native(
-        "PdfCraft",
+        "lhtPDF",
         native_options(launch.integrated, launch.window_controls.is_some(), first),
         app_creator(
             launch.clone(),
@@ -268,7 +320,7 @@ fn main() -> eframe::Result {
             // usually still works there, so that's better than quitting.
             log::error!("the GPU renderer (wgpu) didn't start: {e}. Starting with OpenGL instead; set PDFCRAFT_RENDERER=gl to skip wgpu.");
             eframe::run_native(
-                "PdfCraft",
+                "lhtPDF",
                 native_options(launch.integrated, launch.window_controls.is_some(), eframe::Renderer::Glow),
                 app_creator(
                     launch,
@@ -311,7 +363,7 @@ fn retry_with_gl(choice: RendererChoice, app_started: bool) -> bool {
 /// The window and renderer settings for one run.
 fn native_options(integrated: bool, app_frame: bool, renderer: eframe::Renderer) -> eframe::NativeOptions {
     let mut viewport = egui::ViewportBuilder::default()
-        .with_title("PdfCraft")
+        .with_title("lhtPDF")
         .with_inner_size([1440.0, 920.0])
         .with_min_inner_size([820.0, 520.0])
         .with_drag_and_drop(true)
@@ -378,8 +430,40 @@ fn app_creator<'a>(
         app.enable_desktop_theme();
         // The system's reopen-windows choice (macOS) starts the preference; a saved choice replaces it.
         app.reopen_last_session = reopen::system_default();
-        if let Some(json) = cc.storage.and_then(|s| s.get_string("pdfcraft").or_else(|| s.get_string(LEGACY_STORAGE_KEY))) {
+        let saved_settings = cc.storage
+            .and_then(|s| s.get_string("pdfcraft").or_else(|| s.get_string(LEGACY_STORAGE_KEY)));
+
+        // Preserve the explicit "auto" choice and all valid upstream preferences.
+        let saved_language = saved_settings
+            .as_deref()
+            .and_then(|json| serde_json::from_str::<serde_json::Value>(json).ok())
+            .and_then(|value| value.get("language").and_then(|v| v.as_str()).map(str::to_owned));
+
+        if let Some(json) = saved_settings {
             app.restore(&json);
+        }
+
+        #[cfg(target_os = "windows")]
+        if pdfcraft_ui_egui::portable::data_dir().is_none() {
+            // "auto" is an explicit preference; never replace it with MSI/HKCU.
+            if saved_language.as_deref() != Some("auto") {
+                if let Some(language) = pdfcraft_ui_egui::language_registry::read() {
+                    app.language = language.to_string();
+                } else if let Some(language) = saved_language.as_deref() {
+                    // Migrate old, explicit EN/VI selections into HKCU.
+                    if matches!(language, "en" | "vi") {
+                        if let Err(error) = pdfcraft_ui_egui::language_registry::write(language) {
+                            log::warn!("Could not migrate interface language: {error}");
+                        }
+                    }
+                } else if let Some(language) = msi_install_language() {
+                    // Only seed a new user's setting, never replace a saved one.
+                    app.language = language.to_string();
+                    if let Err(error) = pdfcraft_ui_egui::language_registry::write(language) {
+                        log::warn!("Could not initialize interface language: {error}");
+                    }
+                }
+            }
         }
         app.window_state = pdfcraft_ui_egui::window_state::WindowState::started_with(cc.storage);
         app.integrated_titlebar = integrated;

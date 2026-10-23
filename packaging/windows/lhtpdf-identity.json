@@ -1,0 +1,11 @@
+{
+    "ProductName":  "lhtPDF",
+    "Version":  "26.10.24",
+    "UpgradeCode":  "680426D2-914F-4F51-9368-544207E1BC13",
+    "ComponentGuids":  {
+                           "App":  "3E328B5B-4616-49D0-9B84-D78AEB90DC22",
+                           "StartMenu":  "9D472E32-FECE-4AA5-9CE4-32AD03A7E991",
+                           "Desktop":  "E5FD17F7-B7F9-4B05-A8A9-C70C6D52A9F3",
+                           "PdfContextMenu":  "78C53C6C-1976-4D58-A48F-5F6D128FC2E2"
+                       }
+}

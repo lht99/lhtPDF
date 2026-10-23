@@ -296,9 +296,8 @@ fn palette_arrow_keys_select_results_and_enter_runs_the_selection() {
 #[test]
 fn the_pages_menu_comes_from_the_registry() {
     let mut h = harness();
-    h.get_by_label("Menu").click();
-    h.run_steps(2);
-    h.get_by_label("Pages ⏵").hover();
+    // lhtPDF: Pages is a direct top-level menu, not Menu > Pages.
+    h.get_by_label("Pages").click();
     h.run_steps(3);
     h.get_by_label_contains("Delete pages").click();
     h.run_steps(3);
@@ -324,9 +323,8 @@ fn the_open_recent_menu_lists_files_and_opens_one() {
         }
     });
     h.run_steps(4);
-    h.get_by_label("Menu").click();
-    h.run_steps(2);
-    h.get_by_label("File ⏵").hover();
+    // lhtPDF: File is a direct top-level menu.
+    h.get_by_label("File").click();
     h.run_steps(3);
     h.get_by_label("Open Recent ⏵").hover();
     h.run_steps(3);
@@ -344,9 +342,8 @@ fn the_open_recent_menu_lists_files_and_opens_one() {
 #[test]
 fn the_open_recent_menu_is_disabled_while_the_list_is_empty() {
     let mut h = harness();
-    h.get_by_label("Menu").click();
-    h.run_steps(2);
-    h.get_by_label("File ⏵").hover();
+    // lhtPDF: File is a direct top-level menu.
+    h.get_by_label("File").click();
     h.run_steps(3);
     assert!(
         h.query_by(|n| n.label().as_deref() == Some("Open Recent") && n.is_disabled()).is_some(),
@@ -368,18 +365,16 @@ fn clear_recent_files_at_the_foot_of_open_recent_empties_the_list() {
         app
     });
     h.run_steps(4);
-    h.get_by_label("Menu").click();
-    h.run_steps(2);
-    h.get_by_label("File ⏵").hover();
+    // lhtPDF: File is a direct top-level menu.
+    h.get_by_label("File").click();
     h.run_steps(3);
     h.get_by_label("Open Recent ⏵").hover();
     h.run_steps(3);
     h.get_by_label("Clear Recent Files").click();
     h.run_steps(3);
     assert!(h.state().recent.is_empty(), "the list is empty");
-    h.get_by_label("Menu").click();
-    h.run_steps(2);
-    h.get_by_label("File ⏵").hover();
+    // lhtPDF: File is a direct top-level menu.
+    h.get_by_label("File").click();
     h.run_steps(3);
     assert!(h.query_by(|n| n.label().as_deref() == Some("Open Recent") && n.is_disabled()).is_some(), "and Open Recent is disabled");
 }
@@ -453,13 +448,11 @@ fn localized_shortcuts_update_immediately_and_keep_command_ids_and_key_bindings(
     assert!(!doc.dirty);
 }
 
-/// Menu ▸ View open, with egui told the app runs on `os`.
+/// lhtPDF: open the direct top-level View menu with egui configured for `os`.
 fn view_menu(os: OperatingSystem) -> Harness<'static, PdfCraftApp> {
     let mut h = harness();
     h.ctx.set_os(os);
-    h.get_by_label("Menu").click();
-    h.run_steps(2);
-    h.get_by_label("View ⏵").hover();
+    h.get_by_label("View").click();
     h.run_steps(3);
     h
 }

@@ -1984,19 +1984,20 @@ fn type3_font(
     if chars.is_empty() {
         return Err(EditError::Invalid("replacement text is empty".into()));
     }
-    // The faces differ in coverage (e.g. of Cyrillic), so use the best face that has every
-    // character. When none has them all, the best face reports the character it lacks. Hebrew
-    // text keeps the Hebrew face and takes each character it lacks from the next face that has it.
+    // Prefer one face that covers the entire replacement. If none does, retain the best
+    // face for its existing glyphs and try the remaining faces for missing characters.
+    // This also lets the bundled Latin face supply Vietnamese glyphs absent from
+    // Japanese faces without changing the upstream font selection order.
     let face = if hebrew { faces.first().copied() } else { fallback_face(&faces, &chars, |face, ch| japanese_glyph_from(face, ch).is_ok()) }
         .ok_or_else(|| no_fallback_font(text))?;
-    let others: &[&CraftFont] = if hebrew { faces.get(1..).unwrap_or_default() } else { &[] };
+    let others: &[&CraftFont] = faces.get(1..).unwrap_or_default();
     // Every outline is read before the document is touched, so a character that fails leaves it
     // as it was. Each font takes the next `per_font` characters; codes restart at 1 in each.
     let per_font = max_glyphs.clamp(1, MAX_TYPE3_GLYPHS);
     let mut glyphs = Vec::with_capacity(chars.len());
     for (i, ch) in chars.into_iter().enumerate() {
-        // The chosen face first, then the faces after it (Hebrew text takes a character the Hebrew
-        // face lacks from the next face that has it); a character no face draws is reported once.
+        // Keep the selected face wherever it has the glyph; otherwise try the remaining
+        // faces, including the bundled Latin face, before reporting a missing character.
         let mut drawn = type3_glyph(face, ch)?;
         for f in others.iter().copied() {
             if drawn.is_some() {
@@ -3310,6 +3311,59 @@ mod tests {
         assert_eq!(wrap("一行目　二行目", 4.0, width), ["一行目　", "二行目"]);
     }
 
+    #[test]
+    fn vietnamese_fallback_uses_bundled_latin_glyphs() {
+        let latin = pdfcraft_fonts::document_latin_fonts(false);
+        let face = latin[0];
+
+        // Include the reported U+1ED3 failure and all Vietnamese vowel families.
+        let text = "Tiếng Việt: ă â ê ô ơ ư đ ồ ờ ỡ ự ỳ ỷ ỹ ỵ";
+        for ch in text.chars().filter(|ch| !ch.is_whitespace()) {
+            assert!(
+                japanese_glyph_from(face, ch).is_ok(),
+                "bundled Latin face {} has no glyph for {ch} (U+{:04X})",
+                face.family,
+                ch as u32
+            );
+        }
+    }
+
+    #[test]
+    fn vietnamese_fallback_selects_face_with_complete_coverage() {
+        static JPAN: &[&str] = &["Jpan"];
+        static LATN: &[&str] = &["Latn"];
+
+        let japanese = CraftFont {
+            family: "Japanese",
+            style: "Regular",
+            scripts: JPAN,
+            bytes: b"",
+        };
+        let latin = CraftFont {
+            family: "Latin",
+            style: "Regular",
+            scripts: LATN,
+            bytes: b"",
+        };
+
+        let faces = [&japanese, &latin];
+        let has_glyph = |face: &CraftFont, ch: char| {
+            ch.is_ascii() || (face.family == "Latin" && ch == '\u{1ED3}')
+        };
+
+        assert_eq!(
+            fallback_face(&faces, &['T', 'i', '\u{1ED3}'], has_glyph)
+                .map(|face| face.family),
+            Some("Latin")
+        );
+
+        // Preserve upstream priority when the first face covers everything.
+        assert_eq!(
+            fallback_face(&faces, &['T', 'i'], has_glyph)
+                .map(|face| face.family),
+            Some("Japanese")
+        );
+    }
     #[test]
     fn fallback_face_moves_on_when_the_best_face_lacks_a_character() {
         static JPAN: &[&str] = &["Jpan"];

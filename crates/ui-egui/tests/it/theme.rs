@@ -36,9 +36,7 @@ fn click_toolbar(h: &mut Harness<'static, PdfCraftApp>, label: &str) {
 }
 
 fn open_view_menu(h: &mut Harness<'static, PdfCraftApp>) {
-    h.get_by_label("Menu").click();
-    h.run_steps(2);
-    h.get_by_label("View ⏵").hover();
+    h.get_by_label("View").click();
     h.run_steps(3);
     assert!(h.query_by_label("Switch light / dark theme").is_none());
     h.get_by_label("Display theme ⏵").hover();

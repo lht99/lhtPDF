@@ -3,7 +3,7 @@
 #
 # Exports:
 #   ROOT                    workspace root
-#   VERSION                 [workspace.package] version from Cargo.toml (override: PDFCRAFT_VERSION)
+#   VERSION                 [workspace.package] version from Cargo.toml (no environment override)
 #   PDFCRAFT_BUILD_LABEL    optional label for a local or patched build (letters, digits, dots);
 #                           compiled into `--version` and About, and appended to the package release
 #   DIST                    output directory for release artifacts (default: $ROOT/dist/release)
@@ -23,7 +23,11 @@ workspace_version() {
   ' "$ROOT/Cargo.toml"
 }
 
-VERSION="${PDFCRAFT_VERSION:-$(workspace_version)}"
+if [ -n "${PDFCRAFT_VERSION:-}" ]; then
+  echo "error: PDFCRAFT_VERSION overrides are disabled; update Cargo.toml instead" >&2
+  exit 1
+fi
+VERSION="$(workspace_version)"
 if [ -z "$VERSION" ]; then
   echo "error: could not read [workspace.package] version from $ROOT/Cargo.toml" >&2
   exit 1

@@ -12,15 +12,21 @@ use egui::{Align, Layout};
 use crate::{PdfCraftApp, theme, widgets};
 
 /// Where every PdfCraft release is listed.
-pub const RELEASES_PAGE: &str = "https://github.com/storytold/pdfcraft/releases";
+pub const RELEASES_PAGE: &str = "https://github.com/lht99/lhtPDF/releases";
 
 /// The latest published release.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Release {
-    /// Its version tag, such as `v0.2.0`.
+    /// Its version tag, such as `26.10.24`.
     pub version: String,
     /// Its page on [`RELEASES_PAGE`], where the downloads are.
     pub url: String,
+    /// Published release title.
+    pub name: String,
+    /// Release description from GitHub.
+    pub notes: String,
+    /// Validated MSI download URL, when available.
+    pub msi_url: Option<String>,
 }
 
 /// Asks for the latest release (blocking; it runs on its own thread).
@@ -136,18 +142,32 @@ pub(crate) fn dialog(app: &mut PdfCraftApp, ctx: &egui::Context) {
             }
             Check::Done(Ok(r)) if is_newer(&r.version, current) => {
                 let version = r.version.trim_start_matches(['v', 'V']);
-                ui.label(egui::RichText::new(crate::i18n::fmt(tl!("PdfCraft {v} is available."), &[("v", version)])).strong());
+                ui.label(egui::RichText::new(crate::i18n::fmt(tl!("lhtPDF {v} is available."), &[("v", version)])).strong());
                 ui.label(
                     egui::RichText::new(crate::i18n::fmt(
-                        tl!("You have version {c}. Download the new version from its release page."),
+                        tl!("You have version {c}. Review the release notes and download the new version."),
                         &[("c", current)],
                     ))
                     .color(t.text_muted),
                 );
-                download = Some(r.url.clone());
+                if !r.name.is_empty() {
+                    ui.add_space(8.0);
+                    ui.label(egui::RichText::new(&r.name).strong());
+                }
+                if !r.notes.is_empty() {
+                    ui.add_space(6.0);
+                    ui.label(tl!("Release notes"));
+                    egui::ScrollArea::vertical()
+                        .max_height(200.0)
+                        .auto_shrink([false, true])
+                        .show(ui, |ui| {
+                            ui.label(&r.notes);
+                        });
+                }
+                download = Some(r.msi_url.as_ref().unwrap_or(&r.url).clone());
             }
             Check::Done(Ok(_)) => {
-                ui.label(crate::i18n::fmt(tl!("PdfCraft {c} is up to date."), &[("c", current)]));
+                ui.label(crate::i18n::fmt(tl!("lhtPDF {c} is up to date."), &[("c", current)]));
             }
             Check::Done(Err(e)) => {
                 ui.label(crate::i18n::fmt(tl!("Couldn't check for updates: {e}"), &[("e", &e.to_string())]));

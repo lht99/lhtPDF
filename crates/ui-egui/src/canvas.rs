@@ -240,6 +240,7 @@ pub struct Find {
     pub whole_words: bool,
     /// Shown in the Search panel (Advanced Search) instead of the find bar.
     pub in_panel: bool,
+    pub toolbar_visible: bool,
 }
 
 /// A text selection on one page.
@@ -4641,7 +4642,7 @@ fn page_size_hint(view: &DocView, info: &DocInfo, units: crate::units::Unit, are
 fn find_bar(view: &mut DocView, pages: usize, area: Rect, ui: &mut egui::Ui, t: &Tokens) {
     let Some(find) = view.find.as_mut() else { return };
     // The Search panel shows this search.
-    if find.in_panel {
+    if find.in_panel || find.toolbar_visible {
         return;
     }
     let mut close = false;

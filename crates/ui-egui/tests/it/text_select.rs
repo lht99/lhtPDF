@@ -191,15 +191,14 @@ fn copied(h: &Harness<'static, PdfCraftApp>, want: &str) -> bool {
 
 #[test]
 fn selected_text_copy_edit_and_context_menus() {
-    use egui_kittest::kittest::Queryable;
+    use egui_kittest::kittest::{NodeT, Queryable};
     let (mut h, at) = harness(|_| {});
     click(&mut h, at);
     click(&mut h, at);
     h.state_mut().quick_tool = pdfcraft_ui_egui::QuickTool::Hand;
     h.run_steps(2); // Hide floating Copy so this test can only reach menu entries.
-    h.get_by_label("Menu").click();
-    h.run_steps(2);
-    h.get_by_label("Edit ⏵").hover();
+    // lhtPDF: Edit is a direct top-level menu, distinct from the Edit mode tab.
+    h.get_all_by_label("Edit").filter(|n| n.accesskit_node().role() == egui::accesskit::Role::Button).min_by(|a, b| a.rect().center().y.total_cmp(&b.rect().center().y)).expect("top-level Edit menu").click();
     h.run_steps(3);
     h.get_by_label_contains("Copy").click();
     let mut did_copy = false;
@@ -235,7 +234,7 @@ fn escape_closes_an_open_menu_before_it_clears_the_selection() {
     click(&mut h, at);
     h.run_steps(2);
     assert_eq!(h.state().views[0].selected_text().as_deref(), Some("quick"));
-    h.get_by_label("Menu").click();
+    h.get_by_label("File").click();
     h.run_steps(2);
     assert!(egui::Popup::is_any_open(&h.ctx), "the menu is open");
     h.key_press(egui::Key::Escape);
