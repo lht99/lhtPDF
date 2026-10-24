@@ -156,7 +156,12 @@ Compress-Archive -Path $Portable -DestinationPath $Zip
 
 # Smoke-test the CLI when this machine can run it. An ARM64 build made on an x64 runner can't run
 # here; .github/workflows/windows-arm64.yml installs and runs it on ARM64 instead.
-$HostArch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant()
+$HostArch = switch ($env:PROCESSOR_ARCHITECTURE.ToLowerInvariant()) {
+  'amd64' { 'x64' }
+  'arm64' { 'arm64' }
+  'x86'   { 'x86' }
+  default { throw "Unsupported host architecture: $env:PROCESSOR_ARCHITECTURE" }
+}
 if ($Arch -ne 'arm64' -or $HostArch -eq 'arm64') {
   Invoke-Native 'pdfcraft-cli --version' { & (Join-Path $Stage 'lhtPDF-cli.exe') --version }
 } else {
